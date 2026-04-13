@@ -12,7 +12,7 @@ from corridorkey_studio.models.enums import ClipState
 from corridorkey_studio.models.schemas import ClipEntry, ClipUpdate
 from corridorkey_studio.services.frame_store import FrameStore
 from corridorkey_studio.utils.errors import ClipNotFoundError, InvalidStateTransitionError
-from corridorkey_studio.utils.video import extract_frames, extract_thumbnail, get_video_info
+from corridorkey_studio.utils.video import get_video_info
 
 logger = logging.getLogger(__name__)
 
@@ -65,10 +65,11 @@ class ClipManager:
             raise ClipNotFoundError(f"Clip not found: {clip_id}")
         return clip
 
-    def import_video(self, filename: str, file_data: bytes) -> ClipEntry:
-        """Import a video file: save source, extract frames, create clip entry.
+    def import_video(self, filename: str, file_data: bytes) -> tuple[ClipEntry, str]:
+        """Import a video file: save source, create clip in EXTRACTING state.
 
-        For Phase 2 this runs synchronously. Phase 3 moves extraction to the job queue.
+        Returns (clip, clip_id) — caller is responsible for enqueuing
+        the VIDEO_EXTRACT job via the job queue.
         """
         clip_id = uuid.uuid4().hex[:12]
         name = Path(filename).stem
@@ -82,7 +83,7 @@ class ClipManager:
         source_file = source_dir.with_suffix(ext)
         source_file.write_bytes(file_data)
 
-        # Get video info
+        # Get video info for initial frame count estimate
         info = get_video_info(source_file)
 
         # Create clip entry in EXTRACTING state
@@ -95,27 +96,7 @@ class ClipManager:
         self._clips[clip_id] = clip
         self._save()
 
-        # Extract frames (synchronous for now)
-        try:
-            input_dir = self._frame_store.frames_dir(clip_id, "input")
-            actual_count = extract_frames(source_file, input_dir)
-
-            # Extract thumbnail from middle frame
-            thumb_path = self._frame_store.thumbnail_path(clip_id)
-            mid_frame = actual_count // 2
-            extract_thumbnail(source_file, thumb_path, mid_frame)
-
-            # Update clip
-            clip.frame_count = actual_count
-            clip.thumbnail_url = f"/clips/{clip_id}/thumbnail"
-            self._transition(clip_id, ClipState.RAW)
-        except Exception as e:
-            logger.exception("Frame extraction failed for %s", clip_id)
-            clip.state = ClipState.ERROR
-            clip.error_message = str(e)
-            self._save()
-
-        return self._clips[clip_id]
+        return clip, clip_id
 
     def update_clip(self, clip_id: str, update: ClipUpdate) -> ClipEntry:
         clip = self.get_clip(clip_id)

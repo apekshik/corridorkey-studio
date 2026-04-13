@@ -10,10 +10,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from corridorkey_studio import __version__
 from corridorkey_studio.config import settings
-from corridorkey_studio.routers import clips, frames, health
+from corridorkey_studio.routers import clips, frames, health, jobs
 from corridorkey_studio.services.clip_manager import ClipManager
 from corridorkey_studio.services.frame_store import FrameStore
 from corridorkey_studio.services.gpu import GPUService
+from corridorkey_studio.services.job_queue import JobQueue
 from corridorkey_studio.utils.errors import register_error_handlers
 
 
@@ -25,7 +26,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.gpu_service = GPUService()
     app.state.frame_store = FrameStore(settings.data_dir / "projects")
     app.state.clip_manager = ClipManager(settings.data_dir, app.state.frame_store)
+
+    # Job queue — wire up service references
+    job_queue = JobQueue()
+    job_queue.clip_manager = app.state.clip_manager
+    job_queue.frame_store = app.state.frame_store
+    job_queue.start_worker()
+    app.state.job_queue = job_queue
+
     yield
+
+    # Shutdown
+    await job_queue.stop_worker()
 
 
 def create_app() -> FastAPI:
@@ -51,5 +63,6 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(clips.router)
     app.include_router(frames.router)
+    app.include_router(jobs.router)
 
     return app

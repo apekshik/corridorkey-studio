@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, Request, UploadFile
 from fastapi.responses import Response
 
-from corridorkey_studio.models.enums import ClipState
-from corridorkey_studio.models.schemas import ClipEntry, ClipUpdate
+from corridorkey_studio.models.enums import ClipState, JobType
+from corridorkey_studio.models.schemas import ClipEntry, ClipUpdate, JobCreate
 
 router = APIRouter(prefix="/clips", tags=["clips"])
 
@@ -28,8 +28,14 @@ async def get_clip(request: Request, clip_id: str) -> ClipEntry:
 @router.post("/import", response_model=ClipEntry, status_code=201)
 async def import_video(request: Request, file: UploadFile) -> ClipEntry:
     clip_manager = request.app.state.clip_manager
+    job_queue = request.app.state.job_queue
     data = await file.read()
-    return clip_manager.import_video(file.filename or "untitled.mp4", data)
+    clip, clip_id = clip_manager.import_video(file.filename or "untitled.mp4", data)
+
+    # Enqueue frame extraction as a background job
+    await job_queue.enqueue(JobCreate(clip_id=clip_id, type=JobType.VIDEO_EXTRACT))
+
+    return clip
 
 
 @router.patch("/{clip_id}", response_model=ClipEntry)
