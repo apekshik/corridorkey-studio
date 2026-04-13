@@ -14,6 +14,7 @@ import { ClipState, JobStatus } from "./types";
 export function useJobEvents() {
   const connectionStatus = useSettingsStore((s) => s.connectionStatus);
   const esRef = useRef<EventSource | null>(null);
+  const lastCoverageRefresh = useRef(0);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -31,6 +32,15 @@ export function useJobEvents() {
         if (data.status === "RUNNING") {
           useQueueStore.getState().updateJobStatus(data.id, JobStatus.RUNNING);
         }
+        // Throttled coverage refresh during job progress (every 3s)
+        const now = Date.now();
+        if (now - lastCoverageRefresh.current > 3000) {
+          lastCoverageRefresh.current = now;
+          const selected = useClipStore.getState().selectedClipId;
+          if (selected) {
+            useClipStore.getState().refreshCoverage(selected);
+          }
+        }
       },
       // job:complete
       (data) => {
@@ -38,8 +48,9 @@ export function useJobEvents() {
         useQueueStore.getState().updateJobProgress(data.id, 0, 1);
         if (data.clipState && data.clipId) {
           useClipStore.getState().updateClipState(data.clipId, data.clipState as ClipState);
+          // Refresh coverage for the completed clip
+          useClipStore.getState().refreshCoverage(data.clipId);
         }
-        // Refresh clips to get updated metadata
         useClipStore.getState().refreshClips();
       },
       // job:error / job:cancelled
@@ -50,6 +61,11 @@ export function useJobEvents() {
       (data) => {
         useClipStore.getState().updateClipState(data.id, data.state as ClipState);
         useClipStore.getState().refreshClips();
+        // Refresh coverage if this is the selected clip
+        const selected = useClipStore.getState().selectedClipId;
+        if (data.id === selected) {
+          useClipStore.getState().refreshCoverage(data.id);
+        }
       }
     );
 

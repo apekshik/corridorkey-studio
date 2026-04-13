@@ -6,7 +6,7 @@ import { useClipStore } from "../stores/useClipStore";
 import { useQueueStore } from "../stores/useQueueStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { ClipState, CLIP_STATE_COLORS, JobStatus } from "../lib/types";
-import { importVideo, thumbnailUrl } from "../lib/api";
+import { importVideo, thumbnailUrl, cancelJob } from "../lib/api";
 import { useBlobUrl } from "../lib/useBlobUrl";
 import { useResizeHandle } from "../lib/useResizeHandle";
 
@@ -240,9 +240,7 @@ function ClipRow({
           {clip.name}
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-[8px] text-[var(--text-muted)] uppercase tracking-wider">
-            {clip.state}
-          </span>
+          <ClipStatusLabel clipName={clip.name} clipState={clip.state} />
           <span className="text-[8px] text-[var(--text-muted)] tabular-nums">
             {clip.frameCount} f
           </span>
@@ -282,7 +280,7 @@ function QueueTab({ jobs }: { jobs: ReturnType<typeof useQueueStore.getState>["j
             </span>
           </div>
           <div className="text-[8px] text-[var(--text-muted)] mb-1">
-            {job.type.replace(/_/g, " ")}
+            {job.type === "INFERENCE" ? "KEYING" : job.type === "GVM_ALPHA" || job.type === "VIDEOMAMA_ALPHA" ? "ALPHA GENERATION" : job.type.replace(/_/g, " ")}
           </div>
           <div className="w-full h-1 bg-[#222] relative">
             <div
@@ -290,9 +288,22 @@ function QueueTab({ jobs }: { jobs: ReturnType<typeof useQueueStore.getState>["j
               style={{ width: `${job.progress * 100}%` }}
             />
           </div>
-          {job.status === JobStatus.RUNNING && (
-            <div className="text-[8px] text-[var(--text-muted)] mt-0.5 tabular-nums">
-              {job.currentFrame}/{job.totalFrames}
+          {(job.status === JobStatus.RUNNING || job.status === JobStatus.QUEUED) && (
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-[8px] text-[var(--text-muted)] tabular-nums">
+                {job.currentFrame}/{job.totalFrames}
+              </span>
+              <button
+                onClick={async () => {
+                  try {
+                    await cancelJob(job.id);
+                    useQueueStore.getState().updateJobStatus(job.id, JobStatus.CANCELLED);
+                  } catch {}
+                }}
+                className="text-[8px] text-[var(--text-muted)] hover:text-[var(--error)] cursor-pointer transition-colors uppercase tracking-wider"
+              >
+                CANCEL
+              </button>
             </div>
           )}
         </div>
@@ -303,6 +314,35 @@ function QueueTab({ jobs }: { jobs: ReturnType<typeof useQueueStore.getState>["j
         </div>
       )}
     </>
+  );
+}
+
+function ClipStatusLabel({ clipName, clipState }: { clipName: string; clipState: ClipState }) {
+  const jobs = useQueueStore((s) => s.jobs);
+  const runningJob = jobs.find(
+    (j) => j.clipName === clipName && (j.status === JobStatus.RUNNING || j.status === JobStatus.QUEUED)
+  );
+
+  if (runningJob) {
+    const label = runningJob.type === "INFERENCE" ? "KEYING" :
+      runningJob.type === "GVM_ALPHA" || runningJob.type === "VIDEOMAMA_ALPHA" ? "GENERATING" :
+      runningJob.type === "VIDEO_EXTRACT" ? "EXTRACTING" : runningJob.status;
+
+    return (
+      <span className="text-[8px] uppercase tracking-wider flex items-center gap-1">
+        <span className="w-1 h-1 bg-[var(--accent)] inline-block" style={{ animation: "ck-spin 1.6s ease-in-out infinite" }} />
+        <span className="text-[var(--accent)]">{label}</span>
+        {runningJob.progress > 0 && (
+          <span className="text-[var(--text-muted)]">{Math.round(runningJob.progress * 100)}%</span>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <span className="text-[8px] text-[var(--text-muted)] uppercase tracking-wider">
+      {clipState}
+    </span>
   );
 }
 

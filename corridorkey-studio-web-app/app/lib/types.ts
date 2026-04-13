@@ -25,6 +25,7 @@ export enum JobStatus {
 
 export enum ViewMode {
   INPUT = "INPUT",
+  ALPHA = "ALPHA",
   FG = "FG",
   MATTE = "MATTE",
   COMP = "COMP",

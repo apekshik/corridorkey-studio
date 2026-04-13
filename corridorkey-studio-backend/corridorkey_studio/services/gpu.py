@@ -122,10 +122,20 @@ class GPUService:
             except Exception:
                 pass
 
-            # MPS doesn't expose per-process VRAM usage, report 0
+            # MPS uses unified memory — report process RSS as "used"
+            used_gb = 0.0
+            try:
+                import resource
+                # RSS in bytes on macOS
+                rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                # macOS reports in bytes (not KB like Linux)
+                used_gb = round(rss / (1024**3), 1)
+            except Exception:
+                pass
+
             return GPUInfo(
                 name=f"{chip} (MPS)",
-                vram_used=0.0,
+                vram_used=used_gb,
                 vram_total=total_gb,
             )
         except Exception:

@@ -7,8 +7,9 @@ import {
   Pause,
   ChevronRight,
   SkipForward,
+  Repeat,
 } from "lucide-react";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useClipStore } from "../stores/useClipStore";
 
 export default function FrameScrubber() {
@@ -17,9 +18,44 @@ export default function FrameScrubber() {
   const coverage = useClipStore((s) => s.coverage);
   const setCurrentFrame = useClipStore((s) => s.setCurrentFrame);
   const [playing, setPlaying] = useState(false);
+  const [looping, setLooping] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
 
   const clip = clips.find((c) => c.id === selectedId);
+
+  // Spacebar play/pause
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        setPlaying((p) => !p);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Playback loop — advance frame at ~24fps when playing
+  useEffect(() => {
+    if (!playing || !clip) return;
+    const interval = setInterval(() => {
+      const current = useClipStore.getState();
+      const c = current.clips.find((c) => c.id === current.selectedClipId);
+      if (!c) return;
+      if (c.currentFrame >= c.frameCount - 1) {
+        if (looping) {
+          current.setCurrentFrame(0);
+        } else {
+          setPlaying(false);
+        }
+      } else {
+        current.setCurrentFrame(c.currentFrame + 1);
+      }
+    }, 1000 / 24);
+    return () => clearInterval(interval);
+  }, [playing, looping, clip?.id]);
 
   const disabled = "p-1.5 text-[var(--text-muted)] opacity-30 cursor-default";
 
@@ -39,7 +75,7 @@ export default function FrameScrubber() {
           </div>
           <span className="text-[10px] text-[var(--text-muted)] opacity-50">0 / 0</span>
           <div className="flex items-center gap-3 text-[8px] text-[var(--text-muted)] opacity-30">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 bg-[rgba(255,255,255,0.15)] inline-block" />ALPHA</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 bg-[rgba(59,130,246,0.5)] inline-block" />ALPHA</span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 bg-[rgba(255,50,50,0.5)] inline-block" />KEYED</span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 bg-[rgba(34,197,94,0.6)] inline-block" />ANNOTATED</span>
           </div>
@@ -87,7 +123,7 @@ export default function FrameScrubber() {
         <CoverageLane
           frames={coverage.alphaHints}
           total={clip.frameCount}
-          color="rgba(255,255,255,0.06)"
+          color="rgba(59,130,246,0.25)"
           height="100%"
         />
         <CoverageLane
@@ -161,6 +197,15 @@ export default function FrameScrubber() {
           >
             <SkipForward size={14} />
           </button>
+          <button
+            className={`p-1.5 cursor-pointer transition-colors ${
+              looping ? "text-[var(--accent)]" : "text-[var(--text-muted)] hover:text-[var(--text)]"
+            }`}
+            onClick={() => setLooping(!looping)}
+            title={looping ? "Loop on" : "Loop off"}
+          >
+            <Repeat size={14} />
+          </button>
         </div>
 
         {/* Frame info */}
@@ -179,7 +224,7 @@ export default function FrameScrubber() {
         {/* Timecode / coverage legend */}
         <div className="flex items-center gap-3 text-[8px] text-[var(--text-muted)]">
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-[rgba(255,255,255,0.15)] inline-block" />
+            <span className="w-2 h-2 bg-[rgba(59,130,246,0.5)] inline-block" />
             ALPHA
           </span>
           <span className="flex items-center gap-1">

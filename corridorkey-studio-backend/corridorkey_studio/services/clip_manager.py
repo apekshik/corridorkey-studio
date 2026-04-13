@@ -23,7 +23,7 @@ _TRANSITIONS: dict[ClipState, set[ClipState]] = {
     ClipState.MASKED: {ClipState.READY, ClipState.ERROR},
     ClipState.READY: {ClipState.COMPLETE, ClipState.ERROR},
     ClipState.COMPLETE: {ClipState.READY, ClipState.ERROR},  # re-key allowed
-    ClipState.ERROR: {ClipState.RAW, ClipState.EXTRACTING},  # retry allowed
+    ClipState.ERROR: {ClipState.RAW, ClipState.READY, ClipState.COMPLETE, ClipState.EXTRACTING},  # retry/recovery allowed
 }
 
 

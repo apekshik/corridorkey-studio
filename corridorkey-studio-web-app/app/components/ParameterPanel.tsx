@@ -38,6 +38,9 @@ export default function ParameterPanel() {
     try {
       const job = await createJob(selectedClip.id, jobType);
       addJob(job);
+      // Open queue panel so user sees progress
+      const qs = useQueueStore.getState();
+      if (!qs.isOpen) qs.toggleQueue();
     } catch (err) {
       console.error("Failed to create alpha job:", err);
     }

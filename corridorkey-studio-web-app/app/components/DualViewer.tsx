@@ -8,12 +8,13 @@ import { ViewMode } from "../lib/types";
 import { frameUrl } from "../lib/api";
 import { useBlobUrl } from "../lib/useBlobUrl";
 
-const OUTPUT_MODES = [ViewMode.FG, ViewMode.MATTE, ViewMode.COMP, ViewMode.PROCESSED];
+const OUTPUT_MODES = [ViewMode.ALPHA, ViewMode.FG, ViewMode.MATTE, ViewMode.COMP, ViewMode.PROCESSED];
 const ALL_MODES = [ViewMode.INPUT, ...OUTPUT_MODES];
 
 // Map ViewMode to the backend layer query param
 const LAYER_MAP: Record<string, string> = {
   [ViewMode.INPUT]: "input",
+  [ViewMode.ALPHA]: "alpha_hint",
   [ViewMode.FG]: "fg",
   [ViewMode.MATTE]: "matte",
   [ViewMode.COMP]: "comp",

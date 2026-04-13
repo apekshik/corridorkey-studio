@@ -8,6 +8,14 @@ import { useSettingsStore } from "../stores/useSettingsStore";
 import { JobStatus, BackendMode } from "../lib/types";
 import ServerSetup from "./ServerSetup";
 
+const JOB_LABELS: Record<string, string> = {
+  INFERENCE: "KEYING",
+  GVM_ALPHA: "GENERATING ALPHA",
+  VIDEOMAMA_ALPHA: "GENERATING ALPHA",
+  VIDEO_EXTRACT: "EXTRACTING",
+  PREVIEW: "PREVIEW",
+};
+
 export default function StatusBar() {
   const clips = useClipStore((s) => s.clips);
   const selectedId = useClipStore((s) => s.selectedClipId);
@@ -37,20 +45,43 @@ export default function StatusBar() {
 
   return (
     <>
-      <div className="h-9 flex items-center justify-between px-4 border-t border-[var(--border)] bg-[var(--surface)] shrink-0 select-none overflow-visible relative">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes ck-spin {
+          0% { transform: rotate(0deg); }
+          25% { transform: rotate(180deg); }
+          50% { transform: rotate(180deg); }
+          75% { transform: rotate(360deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}} />
+      <div className="border-t border-[var(--border)] bg-[var(--surface)] shrink-0 select-none overflow-visible relative">
+        {/* Full-width progress bar at top of status bar */}
+        {runningJob && (
+          <div className="h-0.5 bg-[#222] w-full">
+            <div
+              className="h-full bg-[var(--accent)] transition-all duration-300"
+              style={{ width: `${runningJob.progress * 100}%` }}
+            />
+          </div>
+        )}
+
+        <div className="h-9 flex items-center justify-between px-4">
         {/* Left: Progress / frame info */}
         <div className="flex items-center gap-3 flex-1">
           {runningJob && (
-            <div className="w-32 h-1 bg-[#222] relative">
+            <div className="flex items-center gap-2">
               <div
-                className="absolute inset-y-0 left-0 bg-[var(--accent)]"
-                style={{ width: `${runningJob.progress * 100}%` }}
+                className="w-2 h-2 bg-[var(--accent)]"
+                style={{ animation: "ck-spin 1.6s ease-in-out infinite" }}
               />
+              <span className="text-[10px] text-[var(--accent)] uppercase tracking-wider font-bold">
+                {JOB_LABELS[runningJob.type] || runningJob.type.replace(/_/g, " ")}
+              </span>
             </div>
           )}
           <span className="text-[10px] text-[var(--text-muted)]">
             {runningJob
-              ? `${runningJob.currentFrame}/${runningJob.totalFrames} frames`
+              ? `${runningJob.currentFrame}/${runningJob.totalFrames} frames · ${Math.round(runningJob.progress * 100)}%`
               : selectedClip
               ? `${selectedClip.frameCount} frames`
               : "NO CLIP SELECTED"}
@@ -99,12 +130,13 @@ export default function StatusBar() {
             />
             {isConnected ? (
               <span className="text-[9px] text-[var(--text-muted)]">
-                {gpu.name}{gpu.vramTotal > 0 ? ` · ${gpu.vramUsed.toFixed(1)}/${gpu.vramTotal.toFixed(1)} GB` : ""}
+                {gpu.name}{gpu.vramUsed > 0 ? ` · ${gpu.vramUsed.toFixed(1)}/${gpu.vramTotal.toFixed(1)} GB` : ""}
               </span>
             ) : (
               <span className="uppercase tracking-wider">SETUP NEEDED</span>
             )}
           </button>
+        </div>
         </div>
       </div>
       {setupOpen && <ServerSetup onClose={() => setSetupOpen(false)} />}

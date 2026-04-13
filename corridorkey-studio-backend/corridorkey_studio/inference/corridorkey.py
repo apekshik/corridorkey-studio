@@ -52,8 +52,25 @@ class CorridorKeyService(ModelService):
 
             logger.info("Loading real CorridorKey engine on %s (checkpoint dir: %s)", device, ckpt_dir)
 
+            if not ptfiles:
+                # No checkpoint found — download from HuggingFace
+                logger.info("No checkpoint found in %s, downloading...", ckpt_dir)
+                os.makedirs(ckpt_dir, exist_ok=True)
+                try:
+                    from huggingface_hub import hf_hub_download
+                    cached = hf_hub_download(
+                        repo_id="nikopueringer/CorridorKey_v1.0",
+                        filename="CorridorKey_v1.0.pth",
+                    )
+                    import shutil
+                    dest = os.path.join(ckpt_dir, "CorridorKey_v1.0.pth")
+                    shutil.copy2(cached, dest)
+                    ptfiles = [dest]
+                    logger.info("Downloaded checkpoint to %s", dest)
+                except Exception as e:
+                    logger.error("Failed to download checkpoint: %s", e)
+
             if ptfiles:
-                # Use CorridorKeyEngine directly with explicit checkpoint path
                 from CorridorKeyModule.inference_engine import CorridorKeyEngine
                 import torch
 
@@ -64,8 +81,9 @@ class CorridorKeyService(ModelService):
                     model_precision=torch.float16,
                 )
             else:
-                # Let create_engine handle auto-download
-                self._engine = create_engine(device=device)
+                logger.warning("No checkpoint available — falling back to stub")
+                self._is_real = False
+                return
 
             self._is_real = True
         else:

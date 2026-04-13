@@ -69,6 +69,13 @@ class JobQueue:
         """Create a job and add it to the queue."""
         clip = self.clip_manager.get_clip(create.clip_id)
 
+        # Validate clip state for job type
+        if create.type == JobType.INFERENCE and clip.state != ClipState.READY:
+            from corridorkey_studio.utils.errors import InvalidStateTransitionError
+            raise InvalidStateTransitionError(
+                f"Clip '{clip.name}' is {clip.state.value} — generate alpha hints first"
+            )
+
         job_id = uuid.uuid4().hex[:8]
         gpu_job = GPUJob(
             id=job_id,
@@ -358,14 +365,20 @@ class JobQueue:
         input_frames = self.frame_store.list_frames(clip_id, "input")
         if not input_frames:
             raise FileNotFoundError(f"No input frames for clip {clip_id}")
-        job.total_frames = len(input_frames)
+
+        # Only process frames that have alpha hints
+        hint_frames = set(self.frame_store.list_frames(clip_id, "alpha_hint"))
+        frames_to_key = [f for f in input_frames if f in hint_frames]
+        if not frames_to_key:
+            raise FileNotFoundError(f"No alpha hints found for clip {clip_id} — generate hints first")
+        job.total_frames = len(frames_to_key)
 
         # Load CorridorKey model
         service = await loop.run_in_executor(
             None, lambda: self.model_manager.ensure_model(ActiveModel.CORRIDORKEY)
         )
 
-        for i, frame_num in enumerate(input_frames):
+        for i, frame_num in enumerate(frames_to_key):
             if record.is_cancelled:
                 return
 
@@ -378,14 +391,11 @@ class JobQueue:
             frame_path = self.frame_store.find_frame_file(clip_id, "input", frame_num)
             frame = await loop.run_in_executor(None, lambda p=frame_path: read_image(p))
 
-            # Read alpha hint if available
-            alpha_hint = None
+            # Read alpha hint
             hint_path = self.frame_store.find_frame_file(clip_id, "alpha_hint", frame_num)
-            if hint_path:
-                alpha_hint = await loop.run_in_executor(None, lambda p=hint_path: read_image(p))
-                # Convert to single channel if needed
-                if alpha_hint.ndim == 3:
-                    alpha_hint = alpha_hint[..., 0]
+            alpha_hint = await loop.run_in_executor(None, lambda p=hint_path: read_image(p))
+            if alpha_hint.ndim == 3:
+                alpha_hint = alpha_hint[..., 0]
 
             # Run keying
             result = await loop.run_in_executor(
