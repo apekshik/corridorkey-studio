@@ -20,7 +20,17 @@ export default function FrameScrubber() {
   const trackRef = useRef<HTMLDivElement>(null);
 
   const clip = clips.find((c) => c.id === selectedId);
-  if (!clip) return null;
+
+  if (!clip) {
+    return (
+      <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)]">
+        <div className="h-10 bg-[#111] border-b border-[var(--border)]" />
+        <div className="flex items-center justify-center py-2">
+          <span className="text-[10px] text-[var(--text-muted)]">NO CLIP SELECTED</span>
+        </div>
+      </div>
+    );
+  }
 
   const pct = clip.currentFrame / Math.max(1, clip.frameCount - 1);
 
