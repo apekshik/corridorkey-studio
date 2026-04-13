@@ -11,6 +11,7 @@ import { useQueueStore } from "./stores/useQueueStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import { useServerHealth } from "./lib/useServerHealth";
 import { useJobEvents } from "./lib/useJobEvents";
+import SplashScreen from "./components/SplashScreen";
 
 export default function Home() {
   const toggleQueue = useQueueStore((s) => s.toggleQueue);
@@ -43,6 +44,7 @@ export default function Home() {
 
   return (
     <div className="h-full flex flex-col">
+      <SplashScreen />
       <TopBar />
       <div className="flex flex-1 min-h-0">
         <SidePanel />
