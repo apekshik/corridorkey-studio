@@ -28,7 +28,7 @@ export default function SplashScreen() {
   if (phase === "gone") return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div
         className={`bg-[var(--surface)] border border-[var(--border)] w-[520px] overflow-hidden transition-all duration-500 ${
           phase === "in"
@@ -61,7 +61,7 @@ export default function SplashScreen() {
 
         {/* Content */}
         <div className="px-6 pb-5 -mt-4 relative">
-          <h1 className="text-lg font-bold tracking-[0.25em] uppercase text-[var(--text-bright)] mb-2">
+          <h1 className="text-xl font-bold tracking-[0.3em] uppercase text-white mb-2">
             CORRIDORKEY STUDIO
           </h1>
           <p className="text-[11px] text-[var(--text-muted)] leading-relaxed mb-4">
