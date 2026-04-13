@@ -3,16 +3,28 @@
 import { useState } from "react";
 import { Columns2, Square } from "lucide-react";
 import { useClipStore } from "../stores/useClipStore";
+import { useSettingsStore } from "../stores/useSettingsStore";
 import { ViewMode } from "../lib/types";
+import { frameUrl } from "../lib/api";
 
 const OUTPUT_MODES = [ViewMode.FG, ViewMode.MATTE, ViewMode.COMP, ViewMode.PROCESSED];
 const ALL_MODES = [ViewMode.INPUT, ...OUTPUT_MODES];
+
+// Map ViewMode to the backend layer query param
+const LAYER_MAP: Record<string, string> = {
+  [ViewMode.INPUT]: "input",
+  [ViewMode.FG]: "fg",
+  [ViewMode.MATTE]: "matte",
+  [ViewMode.COMP]: "comp",
+  [ViewMode.PROCESSED]: "processed",
+};
 
 export default function DualViewer() {
   const clips = useClipStore((s) => s.clips);
   const selectedId = useClipStore((s) => s.selectedClipId);
   const viewMode = useClipStore((s) => s.viewMode);
   const setViewMode = useClipStore((s) => s.setViewMode);
+  const connected = useSettingsStore((s) => s.connectionStatus) === "connected";
   const clip = clips.find((c) => c.id === selectedId);
   const [split, setSplit] = useState(true);
 
@@ -40,12 +52,7 @@ export default function DualViewer() {
           </div>
           <div className="flex-1 flex items-center justify-center bg-[#0e0e0e]">
             {clip ? (
-              <div className="text-[var(--text-muted)] text-xs text-center">
-                <div className="w-64 h-44 border border-[var(--border)] flex items-center justify-center mb-2 bg-[#1a1a1a]">
-                  <span className="text-[10px]">FRAME {clip.currentFrame}</span>
-                </div>
-                <span className="text-[10px]">{clip.name}</span>
-              </div>
+              <FrameView clipId={clip.id} frame={clip.currentFrame} layer="input" connected={connected} />
             ) : (
               <span className="text-[var(--text-muted)] text-[10px]">NO INPUT</span>
             )}
@@ -88,21 +95,54 @@ export default function DualViewer() {
         </div>
         <div className="flex-1 flex items-center justify-center bg-[#0e0e0e]">
           {clip ? (
-            <div className="text-[var(--text-muted)] text-xs text-center">
-              <div className="w-64 h-44 border border-[var(--border)] flex items-center justify-center mb-2 bg-black">
-                <span className="text-[10px]">
-                  {viewMode === ViewMode.INPUT ? "" : `${viewMode} — `}FRAME {clip.currentFrame}
-                </span>
-              </div>
-              <span className="text-[10px]">
-                {viewMode === ViewMode.INPUT ? clip.name : `${viewMode} OUTPUT`}
-              </span>
-            </div>
+            <FrameView
+              clipId={clip.id}
+              frame={clip.currentFrame}
+              layer={LAYER_MAP[viewMode] || "input"}
+              connected={connected}
+            />
           ) : (
             <span className="text-[var(--text-muted)] text-[10px]">NO OUTPUT</span>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+function FrameView({
+  clipId,
+  frame,
+  layer,
+  connected,
+}: {
+  clipId: string;
+  frame: number;
+  layer: string;
+  connected: boolean;
+}) {
+  const [error, setError] = useState(false);
+
+  if (!connected || error) {
+    return (
+      <div className="text-[var(--text-muted)] text-xs text-center">
+        <div className="w-64 h-44 border border-[var(--border)] flex items-center justify-center mb-2 bg-[#1a1a1a]">
+          <span className="text-[10px]">
+            {!connected ? "SERVER OFFLINE" : `${layer.toUpperCase()} — FRAME ${frame}`}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      key={`${clipId}-${layer}-${frame}`}
+      src={frameUrl(clipId, frame, layer)}
+      alt={`${layer} frame ${frame}`}
+      className="max-w-full max-h-full object-contain"
+      onError={() => setError(true)}
+      onLoad={() => setError(false)}
+    />
   );
 }

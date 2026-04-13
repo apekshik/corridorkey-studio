@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Monitor, Cloud, Settings, Play, Square, ChevronDown, Info, X, Wifi, WifiOff } from "lucide-react";
+import { Monitor, Cloud, Settings, Play, Square, ChevronDown, Info, X } from "lucide-react";
 import { useSettingsStore } from "../stores/useSettingsStore";
-import { BackendMode } from "../lib/types";
+import { useClipStore } from "../stores/useClipStore";
+import { useQueueStore } from "../stores/useQueueStore";
+import { BackendMode, JobType, ClipState } from "../lib/types";
+import { createJob } from "../lib/api";
 import ServerSetup from "./ServerSetup";
 
 const KEY_MODES = [
@@ -25,26 +28,58 @@ const KEY_MODES = [
 ] as const;
 
 export default function TopBar() {
-  const { backendMode, toggleBackendMode, gpu } = useSettingsStore();
-  const vramPct = (gpu.vramUsed / gpu.vramTotal) * 100;
+  const { backendMode, gpu } = useSettingsStore();
+  const vramPct = gpu.vramTotal > 0 ? (gpu.vramUsed / gpu.vramTotal) * 100 : 0;
   const connectionStatus = useSettingsStore((s) => s.connectionStatus);
+  const connected = connectionStatus === "connected";
+  const clips = useClipStore((s) => s.clips);
+  const selectedId = useClipStore((s) => s.selectedClipId);
+  const addJob = useQueueStore((s) => s.addJob);
   const [keyModeIndex, setKeyModeIndex] = useState(0);
   const [keyDropOpen, setKeyDropOpen] = useState(false);
+  const [backendDropOpen, setBackendDropOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
+  const backendDropRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
+  const handleKey = async () => {
+    if (!connected) return;
+    const mode = KEY_MODES[keyModeIndex].id;
+    let targets: string[] = [];
+
+    if (mode === "selected" && selectedId) {
+      targets = [selectedId];
+    } else if (mode === "all-ready") {
+      targets = clips.filter((c) => c.state === ClipState.READY).map((c) => c.id);
+    } else if (mode === "all-pipeline") {
+      targets = clips.filter((c) => c.state === ClipState.READY || c.state === ClipState.RAW).map((c) => c.id);
+    }
+
+    for (const clipId of targets) {
+      try {
+        const job = await createJob(clipId, JobType.INFERENCE);
+        addJob(job);
+      } catch (err) {
+        console.error("Failed to create key job:", err);
+      }
+    }
+  };
+
+  // Close dropdowns on outside click
   useEffect(() => {
-    if (!keyDropOpen) return;
+    if (!keyDropOpen && !backendDropOpen) return;
     const onClick = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
+      if (keyDropOpen && dropRef.current && !dropRef.current.contains(e.target as Node)) {
         setKeyDropOpen(false);
+      }
+      if (backendDropOpen && backendDropRef.current && !backendDropRef.current.contains(e.target as Node)) {
+        setBackendDropOpen(false);
       }
     };
     window.addEventListener("mousedown", onClick);
     return () => window.removeEventListener("mousedown", onClick);
-  }, [keyDropOpen]);
+  }, [keyDropOpen, backendDropOpen]);
 
   return (
     <>
@@ -84,7 +119,15 @@ export default function TopBar() {
           {/* KEY button with dropdown */}
           <div className="relative" ref={dropRef}>
             <div className="flex">
-              <button className="flex items-center gap-1.5 px-3 py-1 bg-[var(--accent)] text-[var(--text-bright)] text-[10px] uppercase tracking-wider font-bold cursor-pointer hover:bg-[var(--accent-dim)] transition-colors">
+              <button
+                onClick={handleKey}
+                disabled={!connected}
+                className={`flex items-center gap-1.5 px-3 py-1 text-[10px] uppercase tracking-wider font-bold transition-colors ${
+                  connected
+                    ? "bg-[var(--accent)] text-[var(--text-bright)] cursor-pointer hover:bg-[var(--accent-dim)]"
+                    : "bg-[var(--surface-2)] text-[var(--text-muted)] cursor-not-allowed opacity-50"
+                }`}
+              >
                 <Play size={10} fill="currentColor" />
                 {KEY_MODES[keyModeIndex].label}
               </button>
@@ -130,17 +173,52 @@ export default function TopBar() {
             STOP
           </button>
           <div className="w-px h-5 bg-[var(--border)] mx-1" />
-          <button
-            onClick={toggleBackendMode}
-            className="flex items-center gap-1.5 px-2 py-1 border border-[var(--border)] text-[10px] uppercase tracking-wider cursor-pointer hover:border-[var(--text-muted)] transition-colors"
-          >
-            {backendMode === BackendMode.LOCAL ? (
-              <Monitor size={12} />
-            ) : (
-              <Cloud size={12} />
+          <div className="relative" ref={backendDropRef}>
+            <button
+              onClick={() => setBackendDropOpen(!backendDropOpen)}
+              className="flex items-center gap-1.5 px-2 py-1 border border-[var(--border)] text-[10px] uppercase tracking-wider cursor-pointer hover:border-[var(--text-muted)] transition-colors"
+            >
+              {backendMode === BackendMode.LOCAL ? (
+                <Monitor size={12} />
+              ) : (
+                <Cloud size={12} />
+              )}
+              {backendMode}
+              <ChevronDown size={10} />
+            </button>
+            {backendDropOpen && (
+              <div className="absolute right-0 top-full mt-1 w-56 bg-[var(--surface)] border border-[var(--border)] z-50">
+                <button
+                  onClick={() => {
+                    useSettingsStore.getState().toggleBackendMode();
+                    setBackendDropOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 cursor-pointer transition-colors border-b border-[var(--border)] ${
+                    backendMode === BackendMode.LOCAL ? "bg-[var(--surface-2)]" : "hover:bg-[var(--surface-2)]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Monitor size={12} className="text-[var(--text)]" />
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text)]">LOCAL</div>
+                      <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Run on your GPU</div>
+                    </div>
+                  </div>
+                </button>
+                <div
+                  className="w-full text-left px-3 py-2 opacity-40 cursor-not-allowed"
+                >
+                  <div className="flex items-center gap-2">
+                    <Cloud size={12} className="text-[var(--text-muted)]" />
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">CLOUD</div>
+                      <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Run on cloud GPUs — coming soon</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
-            {backendMode}
-          </button>
+          </div>
 
           {/* Connection status indicator */}
           {backendMode === BackendMode.LOCAL && (

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Plus, PanelLeftOpen, PanelLeftClose } from "lucide-react";
 import { useClipStore } from "../stores/useClipStore";
 import { useQueueStore } from "../stores/useQueueStore";
+import { useSettingsStore } from "../stores/useSettingsStore";
 import { ClipState, CLIP_STATE_COLORS, JobStatus } from "../lib/types";
+import { importVideo, thumbnailUrl } from "../lib/api";
 
 type Tab = "MEDIA" | "QUEUE";
 
@@ -104,6 +106,25 @@ function MediaTab({
   selectClip: (id: string) => void;
 }) {
   const [filter, setFilter] = useState<Filter>("ALL");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const connected = useSettingsStore((s) => s.connectionStatus) === "connected";
+  const addClip = useClipStore((s) => s.addClip);
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      try {
+        const clip = await importVideo(file);
+        addClip(clip);
+        selectClip(clip.id);
+      } catch (err) {
+        console.error("Import failed:", err);
+      }
+    }
+    // Reset input so same file can be re-selected
+    if (fileRef.current) fileRef.current.value = "";
+  };
 
   const filtered = useMemo(() => {
     switch (filter) {
@@ -120,6 +141,14 @@ function MediaTab({
 
   return (
     <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="video/*,.mov,.mp4,.avi,.mxf,.mkv"
+        multiple
+        className="hidden"
+        onChange={handleImport}
+      />
       {/* Filter bar + import */}
       <div className="flex items-center border-b border-[var(--border)]">
         {FILTERS.map((f) => (
@@ -136,8 +165,14 @@ function MediaTab({
           </button>
         ))}
         <button
-          className="px-2 py-1.5 text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer transition-colors border-l border-[var(--border)]"
-          title="Import clips"
+          onClick={() => fileRef.current?.click()}
+          disabled={!connected}
+          className={`px-2 py-1.5 cursor-pointer transition-colors border-l border-[var(--border)] ${
+            connected
+              ? "text-[var(--text-muted)] hover:text-[var(--text)]"
+              : "text-[var(--text-muted)] opacity-30 cursor-not-allowed"
+          }`}
+          title={connected ? "Import clips" : "Connect to server first"}
         >
           <Plus size={12} />
         </button>
@@ -162,7 +197,7 @@ function ClipRow({
   selected,
   onClick,
 }: {
-  clip: { id: string; name: string; state: ClipState; frameCount: number; warnings: string[] };
+  clip: { id: string; name: string; state: ClipState; frameCount: number; warnings: string[]; thumbnailUrl: string | null };
   selected: boolean;
   onClick: () => void;
 }) {
@@ -173,13 +208,21 @@ function ClipRow({
         selected ? "bg-[var(--surface-2)]" : "hover:bg-[var(--surface-2)]"
       }`}
     >
-      {/* Thumbnail placeholder */}
+      {/* Thumbnail */}
       <div
-        className="w-10 h-10 shrink-0 border border-[var(--border)] bg-[#1a1a1a] flex items-center justify-center relative"
+        className="w-10 h-10 shrink-0 border border-[var(--border)] bg-[#1a1a1a] flex items-center justify-center relative overflow-hidden"
       >
-        <span className="text-[7px] text-[var(--text-muted)]">
-          {clip.frameCount}f
-        </span>
+        {clip.thumbnailUrl ? (
+          <img
+            src={thumbnailUrl(clip.id)}
+            alt={clip.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <span className="text-[7px] text-[var(--text-muted)]">
+            {clip.frameCount}f
+          </span>
+        )}
         <div
           className="absolute bottom-0 left-0 right-0 h-0.5"
           style={{ background: CLIP_STATE_COLORS[clip.state] }}

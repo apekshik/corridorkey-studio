@@ -7,7 +7,7 @@ import {
   DEFAULT_INFERENCE_PARAMS,
   DEFAULT_OUTPUT_CONFIG,
 } from "../lib/types";
-import { MOCK_GPU } from "../lib/mock-data";
+import { setServerUrl as setApiServerUrl } from "../lib/api";
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
 
@@ -33,7 +33,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   inferenceParams: DEFAULT_INFERENCE_PARAMS,
   outputConfig: DEFAULT_OUTPUT_CONFIG,
   backendMode: BackendMode.LOCAL,
-  gpu: MOCK_GPU,
+  gpu: { name: "—", vramUsed: 0, vramTotal: 0 },
   settingsPanelOpen: true,
   connectionStatus: "disconnected",
   serverUrl: "http://localhost:8000",
@@ -60,5 +60,8 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
 
   setGPU: (gpu) => set({ gpu }),
   setConnectionStatus: (status) => set({ connectionStatus: status }),
-  setServerUrl: (url) => set({ serverUrl: url }),
+  setServerUrl: (url) => {
+    setApiServerUrl(url);
+    set({ serverUrl: url });
+  },
 }));

@@ -4,7 +4,9 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useClipStore } from "../stores/useClipStore";
-import { ClipState } from "../lib/types";
+import { useQueueStore } from "../stores/useQueueStore";
+import { ClipState, JobType } from "../lib/types";
+import { createJob } from "../lib/api";
 
 const ALPHA_MODELS = ["GVM AUTO", "VIDEOMAMA"] as const;
 
@@ -20,10 +22,23 @@ export default function ParameterPanel() {
     selectedClip.currentFrame > 0 &&
     selectedClip.currentFrame < selectedClip.frameCount;
   const canExport = isComplete || isPartialKeyed;
+  const connected = useSettingsStore((s) => s.connectionStatus) === "connected";
+  const addJob = useQueueStore((s) => s.addJob);
   const [alphaModelIndex, setAlphaModelIndex] = useState(0);
 
   const cycleModel = (dir: -1 | 1) => {
     setAlphaModelIndex((i) => (i + dir + ALPHA_MODELS.length) % ALPHA_MODELS.length);
+  };
+
+  const handleGenerate = async () => {
+    if (!selectedClip || !connected) return;
+    const jobType = alphaModelIndex === 0 ? JobType.GVM_ALPHA : JobType.VIDEOMAMA_ALPHA;
+    try {
+      const job = await createJob(selectedClip.id, jobType);
+      addJob(job);
+    } catch (err) {
+      console.error("Failed to create alpha job:", err);
+    }
   };
 
   return (
@@ -142,7 +157,7 @@ export default function ParameterPanel() {
           </button>
         </div>
         <div className="flex gap-2">
-          <ActionButton label="GENERATE" accent />
+          <ActionButton label="GENERATE" accent onClick={handleGenerate} disabled={!selectedClip || !connected} />
           <ActionButton label="EXPORT MASKS" />
         </div>
       </Section>
@@ -225,13 +240,17 @@ function Section({
   );
 }
 
-function ActionButton({ label, accent }: { label: string; accent?: boolean }) {
+function ActionButton({ label, accent, onClick, disabled }: { label: string; accent?: boolean; onClick?: () => void; disabled?: boolean }) {
   return (
     <button
-      className={`w-full py-1.5 border text-[10px] uppercase tracking-wider font-bold cursor-pointer transition-colors ${
-        accent
-          ? "border-[var(--accent)] bg-[var(--accent)] text-white hover:bg-[var(--accent-dim)]"
-          : "border-[var(--border)] text-[var(--text)] hover:border-[var(--text-muted)] hover:bg-[var(--surface-2)]"
+      onClick={onClick}
+      disabled={disabled}
+      className={`w-full py-1.5 border text-[10px] uppercase tracking-wider font-bold transition-colors ${
+        disabled
+          ? "border-[var(--border)] text-[var(--text-muted)] opacity-40 cursor-not-allowed"
+          : accent
+          ? "border-[var(--accent)] bg-[var(--accent)] text-white cursor-pointer hover:bg-[var(--accent-dim)]"
+          : "border-[var(--border)] text-[var(--text)] cursor-pointer hover:border-[var(--text-muted)] hover:bg-[var(--surface-2)]"
       }`}
     >
       {label}

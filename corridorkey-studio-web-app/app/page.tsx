@@ -10,14 +10,16 @@ import SidePanel from "./components/SidePanel";
 import { useQueueStore } from "./stores/useQueueStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import { useServerHealth } from "./lib/useServerHealth";
+import { useJobEvents } from "./lib/useJobEvents";
 
 export default function Home() {
   const toggleQueue = useQueueStore((s) => s.toggleQueue);
   const toggleSettings = useSettingsStore((s) => s.toggleSettingsPanel);
   const settingsOpen = useSettingsStore((s) => s.settingsPanelOpen);
 
-  // Poll local server health
+  // Poll local server health + subscribe to SSE job events
   useServerHealth();
+  useJobEvents();
 
   // Keyboard shortcuts
   useEffect(() => {

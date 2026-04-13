@@ -2,9 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { useSettingsStore } from "../stores/useSettingsStore";
+import { useClipStore } from "../stores/useClipStore";
+import { useQueueStore } from "../stores/useQueueStore";
 import { BackendMode } from "./types";
 
-const POLL_INTERVAL = 5000; // 5 seconds
+const POLL_INTERVAL = 5000;
 
 export function useServerHealth() {
   const serverUrl = useSettingsStore((s) => s.serverUrl);
@@ -12,6 +14,7 @@ export function useServerHealth() {
   const setConnectionStatus = useSettingsStore((s) => s.setConnectionStatus);
   const setGPU = useSettingsStore((s) => s.setGPU);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wasConnectedRef = useRef(false);
 
   useEffect(() => {
     if (backendMode !== BackendMode.LOCAL) {
@@ -31,11 +34,19 @@ export function useServerHealth() {
           if (data.gpu) {
             setGPU(data.gpu);
           }
+          // On first connection, fetch clips and jobs
+          if (!wasConnectedRef.current) {
+            wasConnectedRef.current = true;
+            useClipStore.getState().refreshClips();
+            useQueueStore.getState().refreshJobs();
+          }
         } else {
           setConnectionStatus("disconnected");
+          wasConnectedRef.current = false;
         }
       } catch {
         setConnectionStatus("disconnected");
+        wasConnectedRef.current = false;
       }
     };
 

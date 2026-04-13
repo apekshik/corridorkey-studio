@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { GPUJob, JobStatus } from "../lib/types";
-import { MOCK_JOBS } from "../lib/mock-data";
+import { fetchJobs } from "../lib/api";
 
 interface QueueStore {
   jobs: GPUJob[];
@@ -11,10 +11,12 @@ interface QueueStore {
   updateJobProgress: (id: string, currentFrame: number, progress: number) => void;
   updateJobStatus: (id: string, status: JobStatus) => void;
   removeJob: (id: string) => void;
+  setJobs: (jobs: GPUJob[]) => void;
+  refreshJobs: () => Promise<void>;
 }
 
 export const useQueueStore = create<QueueStore>((set) => ({
-  jobs: MOCK_JOBS,
+  jobs: [],
   isOpen: false,
 
   toggleQueue: () => set((s) => ({ isOpen: !s.isOpen })),
@@ -34,4 +36,15 @@ export const useQueueStore = create<QueueStore>((set) => ({
     })),
 
   removeJob: (id) => set((s) => ({ jobs: s.jobs.filter((j) => j.id !== id) })),
+
+  setJobs: (jobs) => set({ jobs }),
+
+  refreshJobs: async () => {
+    try {
+      const jobs = await fetchJobs();
+      set({ jobs });
+    } catch {
+      // Server not available
+    }
+  },
 }));
