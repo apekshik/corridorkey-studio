@@ -21,12 +21,28 @@ export default function FrameScrubber() {
 
   const clip = clips.find((c) => c.id === selectedId);
 
+  const disabled = "p-1.5 text-[var(--text-muted)] opacity-30 cursor-default";
+
   if (!clip) {
     return (
       <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)]">
-        <div className="h-10 bg-[#111] border-b border-[var(--border)]" />
-        <div className="flex items-center justify-center py-2">
-          <span className="text-[10px] text-[var(--text-muted)]">NO CLIP SELECTED</span>
+        <div className="relative h-10 mx-3 mt-2">
+          <div className="absolute inset-x-0 top-1/2 h-px bg-[#222]" />
+        </div>
+        <div className="flex items-center justify-between px-3 py-1.5">
+          <div className="flex items-center gap-0">
+            <span className={disabled}><SkipBack size={14} /></span>
+            <span className={disabled}><ChevronLeft size={14} /></span>
+            <span className={disabled}><Play size={14} fill="currentColor" /></span>
+            <span className={disabled}><ChevronRight size={14} /></span>
+            <span className={disabled}><SkipForward size={14} /></span>
+          </div>
+          <span className="text-[10px] text-[var(--text-muted)] opacity-50">0 / 0</span>
+          <div className="flex items-center gap-3 text-[8px] text-[var(--text-muted)] opacity-30">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 bg-[rgba(255,255,255,0.15)] inline-block" />ALPHA</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 bg-[rgba(255,50,50,0.5)] inline-block" />KEYED</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 bg-[rgba(34,197,94,0.6)] inline-block" />ANNOTATED</span>
+          </div>
         </div>
       </div>
     );
