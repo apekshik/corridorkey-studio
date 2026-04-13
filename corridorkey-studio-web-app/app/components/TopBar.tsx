@@ -212,7 +212,7 @@ export default function TopBar() {
                     <Cloud size={12} className="text-[var(--text-muted)]" />
                     <div>
                       <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">CLOUD</div>
-                      <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Run on cloud GPUs — coming soon</div>
+                      <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Free cloud GPUs with generous limits — coming soon</div>
                     </div>
                   </div>
                 </div>
