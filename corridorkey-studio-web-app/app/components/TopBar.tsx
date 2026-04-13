@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Monitor, Cloud, Settings, Play, Square, ChevronDown, Info, X } from "lucide-react";
+import { Settings, Play, Square, ChevronDown, Info, X } from "lucide-react";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useClipStore } from "../stores/useClipStore";
 import { useQueueStore } from "../stores/useQueueStore";
-import { BackendMode, JobType, ClipState } from "../lib/types";
+import { JobType, ClipState } from "../lib/types";
 import { createJob } from "../lib/api";
-import ServerSetup from "./ServerSetup";
 
 const KEY_MODES = [
   {
@@ -28,20 +27,16 @@ const KEY_MODES = [
 ] as const;
 
 export default function TopBar() {
-  const { backendMode, gpu } = useSettingsStore();
+  const gpu = useSettingsStore((s) => s.gpu);
   const vramPct = gpu.vramTotal > 0 ? (gpu.vramUsed / gpu.vramTotal) * 100 : 0;
-  const connectionStatus = useSettingsStore((s) => s.connectionStatus);
-  const connected = connectionStatus === "connected";
+  const connected = useSettingsStore((s) => s.connectionStatus) === "connected";
   const clips = useClipStore((s) => s.clips);
   const selectedId = useClipStore((s) => s.selectedClipId);
   const addJob = useQueueStore((s) => s.addJob);
   const [keyModeIndex, setKeyModeIndex] = useState(0);
   const [keyDropOpen, setKeyDropOpen] = useState(false);
-  const [backendDropOpen, setBackendDropOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
-  const [setupOpen, setSetupOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
-  const backendDropRef = useRef<HTMLDivElement>(null);
 
   const handleKey = async () => {
     if (!connected) return;
@@ -66,20 +61,17 @@ export default function TopBar() {
     }
   };
 
-  // Close dropdowns on outside click
+  // Close dropdown on outside click
   useEffect(() => {
-    if (!keyDropOpen && !backendDropOpen) return;
+    if (!keyDropOpen) return;
     const onClick = (e: MouseEvent) => {
-      if (keyDropOpen && dropRef.current && !dropRef.current.contains(e.target as Node)) {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
         setKeyDropOpen(false);
-      }
-      if (backendDropOpen && backendDropRef.current && !backendDropRef.current.contains(e.target as Node)) {
-        setBackendDropOpen(false);
       }
     };
     window.addEventListener("mousedown", onClick);
     return () => window.removeEventListener("mousedown", onClick);
-  }, [keyDropOpen, backendDropOpen]);
+  }, [keyDropOpen]);
 
   return (
     <>
@@ -172,81 +164,6 @@ export default function TopBar() {
             <Square size={10} />
             STOP
           </button>
-          <div className="w-px h-5 bg-[var(--border)] mx-1" />
-          <div className="relative" ref={backendDropRef}>
-            <button
-              onClick={() => setBackendDropOpen(!backendDropOpen)}
-              className="flex items-center gap-1.5 px-2 py-1 border border-[var(--border)] text-[10px] uppercase tracking-wider cursor-pointer hover:border-[var(--text-muted)] transition-colors"
-            >
-              {backendMode === BackendMode.LOCAL ? (
-                <Monitor size={12} />
-              ) : (
-                <Cloud size={12} />
-              )}
-              {backendMode}
-              <ChevronDown size={10} />
-            </button>
-            {backendDropOpen && (
-              <div className="absolute right-0 top-full mt-1 w-56 bg-[var(--surface)] border border-[var(--border)] z-50">
-                <button
-                  onClick={() => {
-                    useSettingsStore.getState().toggleBackendMode();
-                    setBackendDropOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 cursor-pointer transition-colors border-b border-[var(--border)] ${
-                    backendMode === BackendMode.LOCAL ? "bg-[var(--surface-2)]" : "hover:bg-[var(--surface-2)]"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Monitor size={12} className="text-[var(--text)]" />
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text)]">LOCAL</div>
-                      <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Run on your GPU</div>
-                    </div>
-                  </div>
-                </button>
-                <div
-                  className="w-full text-left px-3 py-2 opacity-40 cursor-not-allowed"
-                >
-                  <div className="flex items-center gap-2">
-                    <Cloud size={12} className="text-[var(--text-muted)]" />
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">CLOUD</div>
-                      <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Free cloud GPUs with generous limits — coming soon</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Connection status indicator */}
-          {backendMode === BackendMode.LOCAL && (
-            <button
-              onClick={() => setSetupOpen(true)}
-              className={`flex items-center gap-1.5 px-2 py-1 text-[10px] uppercase tracking-wider cursor-pointer transition-colors ${
-                connectionStatus === "connected"
-                  ? "text-[var(--success)]"
-                  : connectionStatus === "connecting"
-                  ? "text-[var(--warning)]"
-                  : "text-[var(--error)]"
-              }`}
-              title={connectionStatus === "connected" ? "Server connected" : "Click to set up local server"}
-            >
-              <div
-                className="w-2 h-2"
-                style={{
-                  background:
-                    connectionStatus === "connected"
-                      ? "var(--success)"
-                      : connectionStatus === "connecting"
-                      ? "var(--warning)"
-                      : "var(--error)",
-                }}
-              />
-              {connectionStatus === "connected" ? "" : "SETUP"}
-            </button>
-          )}
 
           <button className="p-1 text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer transition-colors">
             <Settings size={14} />
@@ -256,8 +173,6 @@ export default function TopBar() {
 
       {/* Info overlay */}
       {infoOpen && <InfoOverlay onClose={() => setInfoOpen(false)} />}
-      {/* Server setup overlay */}
-      {setupOpen && <ServerSetup onClose={() => setSetupOpen(false)} />}
     </>
   );
 }
