@@ -20,7 +20,7 @@ CorridorKey Studio wraps the [CorridorKey](https://github.com/CorridorDigital/Co
 - **Parameter tuning** — despill, despeckle, refiner, color space, live preview
 - **Media panel** — manage multiple clips, filter by state, track progress
 - **Job queue** — batch process clips with real-time progress
-- **Local or cloud** — run on your own GPU or sign in to key footage for free on cloud GPUs
+- **Local or cloud** — run on your own GPU, or sign in to key footage for free on cloud GPUs with generous usage limits
 
 ## Stack
 
