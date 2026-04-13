@@ -7,6 +7,10 @@ const SHOWCASE_IMAGES = [
   "/showcase/corridorkey-splash-screen-2.png",
   "/showcase/corridorkey-splash-screen-3.png",
   "/showcase/corridorkey-splash-screen-4.png",
+  "/showcase/corridorkey-splash-screen-5.png",
+  "/showcase/corridorkey-splash-screen-6.png",
+  "/showcase/corridorkey-splash-screen-7.png",
+  "/showcase/corridorkey-splash-screen-8.png",
 ];
 
 export default function SplashScreen() {
