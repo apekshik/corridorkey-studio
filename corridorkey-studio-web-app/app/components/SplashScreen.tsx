@@ -30,7 +30,7 @@ export default function SplashScreen() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div
-        className={`bg-[var(--surface)] border border-[var(--border)] w-[520px] overflow-hidden transition-all duration-500 ${
+        className={`bg-[var(--surface)] border border-[var(--border)] w-[780px] overflow-hidden transition-all duration-500 ${
           phase === "in"
             ? "opacity-0 scale-95"
             : phase === "fading"
@@ -39,7 +39,7 @@ export default function SplashScreen() {
         }`}
       >
         {/* Image */}
-        <div className="w-full h-56 bg-[#0a0a0a] relative overflow-hidden">
+        <div className="w-full h-80 bg-[#0a0a0a] relative overflow-hidden">
           {!imageError ? (
             <img
               key={imageIndex}

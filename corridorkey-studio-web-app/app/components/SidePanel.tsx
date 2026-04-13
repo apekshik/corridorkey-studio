@@ -7,6 +7,7 @@ import { useQueueStore } from "../stores/useQueueStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { ClipState, CLIP_STATE_COLORS, JobStatus } from "../lib/types";
 import { importVideo, thumbnailUrl } from "../lib/api";
+import { useResizeHandle } from "../lib/useResizeHandle";
 
 type Tab = "MEDIA" | "QUEUE";
 
@@ -18,9 +19,10 @@ export default function SidePanel() {
   const [tab, setTab] = useState<Tab>("MEDIA");
 
   const runningJobs = jobs.filter((j) => j.status === JobStatus.RUNNING).length;
+  const { width, onMouseDown } = useResizeHandle({ initialWidth: 240, minWidth: 180, maxWidth: 400, side: "right" });
 
   return (
-    <div className="flex shrink-0">
+    <div className="flex shrink-0 relative">
       {/* Collapsed toggle strip — always visible */}
       {!isOpen && (
         <button
@@ -36,7 +38,7 @@ export default function SidePanel() {
 
       {/* Expanded panel */}
       {isOpen && (
-        <div className="w-60 border-r border-[var(--border)] bg-[var(--surface)] flex flex-col shrink-0">
+        <div className="border-r border-[var(--border)] bg-[var(--surface)] flex flex-col shrink-0" style={{ width }}>
           {/* Header with tabs + close */}
           <div className="flex items-center border-b border-[var(--border)]">
             <button
@@ -83,6 +85,14 @@ export default function SidePanel() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Drag handle */}
+      {isOpen && (
+        <div
+          onMouseDown={onMouseDown}
+          className="w-1 cursor-col-resize hover:bg-[var(--accent)] transition-colors absolute top-0 bottom-0 right-0 z-10"
+        />
       )}
     </div>
   );

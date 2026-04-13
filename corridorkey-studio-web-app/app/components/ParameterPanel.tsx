@@ -7,6 +7,7 @@ import { useClipStore } from "../stores/useClipStore";
 import { useQueueStore } from "../stores/useQueueStore";
 import { ClipState, JobType } from "../lib/types";
 import { createJob } from "../lib/api";
+import { useResizeHandle } from "../lib/useResizeHandle";
 
 const ALPHA_MODELS = ["GVM AUTO", "VIDEOMAMA"] as const;
 
@@ -24,6 +25,7 @@ export default function ParameterPanel() {
   const canExport = isComplete || isPartialKeyed;
   const connected = useSettingsStore((s) => s.connectionStatus) === "connected";
   const addJob = useQueueStore((s) => s.addJob);
+  const { width: panelWidth, onMouseDown: onResizeMouseDown } = useResizeHandle({ initialWidth: 280, minWidth: 220, maxWidth: 400, side: "left" });
   const [alphaModelIndex, setAlphaModelIndex] = useState(0);
 
   const cycleModel = (dir: -1 | 1) => {
@@ -42,7 +44,7 @@ export default function ParameterPanel() {
   };
 
   return (
-    <div className="w-[280px] border-l border-[var(--border)] bg-[var(--surface)] overflow-y-auto shrink-0">
+    <div className="border-l border-[var(--border)] bg-[var(--surface)] overflow-y-auto shrink-0 relative" style={{ width: panelWidth }}>
       {/* Panel title */}
       <div className="px-4 py-2.5 text-xs font-bold tracking-[0.2em] uppercase text-[var(--text-bright)] border-b border-[var(--border)]">
         SETTINGS
@@ -219,6 +221,12 @@ export default function ParameterPanel() {
           )}
         </button>
       </Section>
+
+      {/* Drag handle */}
+      <div
+        onMouseDown={onResizeMouseDown}
+        className="w-1 cursor-col-resize hover:bg-[var(--accent)] transition-colors absolute top-0 bottom-0 left-0 z-10"
+      />
     </div>
   );
 }
