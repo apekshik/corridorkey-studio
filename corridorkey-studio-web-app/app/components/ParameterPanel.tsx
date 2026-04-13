@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Monitor, Wifi, WifiOff } from "lucide-react";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useClipStore } from "../stores/useClipStore";
 import { useQueueStore } from "../stores/useQueueStore";
@@ -44,7 +44,7 @@ export default function ParameterPanel() {
   };
 
   return (
-    <div className="border-l border-[var(--border)] bg-[var(--surface)] overflow-y-auto shrink-0 relative" style={{ width: panelWidth }}>
+    <div className="border-l border-[var(--border)] bg-[var(--surface)] shrink-0 relative flex flex-col overflow-y-auto" style={{ width: panelWidth }}>
       {/* Panel title */}
       <div className="px-4 py-2.5 text-xs font-bold tracking-[0.2em] uppercase text-[var(--text-bright)] border-b border-[var(--border)]">
         SETTINGS
@@ -222,11 +222,59 @@ export default function ParameterPanel() {
         </button>
       </Section>
 
+      {/* Spacer to push connection status to bottom */}
+      <div className="flex-1" />
+
+      {/* Connection status */}
+      <ConnectionStatus />
+
       {/* Drag handle */}
       <div
         onMouseDown={onResizeMouseDown}
         className="w-1 cursor-col-resize hover:bg-[var(--accent)] transition-colors absolute top-0 bottom-0 left-0 z-10"
       />
+    </div>
+  );
+}
+
+function ConnectionStatus() {
+  const connectionStatus = useSettingsStore((s) => s.connectionStatus);
+  const gpu = useSettingsStore((s) => s.gpu);
+  const isConnected = connectionStatus === "connected";
+
+  return (
+    <div className="border-t border-[var(--border)] px-4 py-3 shrink-0">
+      <div className="flex items-center gap-2 mb-2">
+        <div
+          className="w-2 h-2 shrink-0"
+          style={{
+            background: isConnected ? "var(--success)" : connectionStatus === "connecting" ? "var(--warning)" : "var(--error)",
+          }}
+        />
+        <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--text)]">
+          {isConnected ? "CONNECTED" : "NOT CONNECTED"}
+        </span>
+      </div>
+      {isConnected ? (
+        <div className="flex items-center gap-2 text-[9px] text-[var(--text-muted)]">
+          <Monitor size={10} />
+          <span>{gpu.name}</span>
+          {gpu.vramTotal > 0 && (
+            <span className="text-[var(--text-muted)]">
+              {gpu.vramUsed.toFixed(1)}/{gpu.vramTotal.toFixed(1)} GB
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <p className="text-[9px] text-[var(--text-muted)] leading-relaxed">
+            Start the local server to begin keying.
+          </p>
+          <div className="bg-[#0a0a0a] border border-[var(--border)] px-2.5 py-1.5 text-[9px] text-[var(--text)] font-mono">
+            corridorkey-studio serve
+          </div>
+        </div>
+      )}
     </div>
   );
 }
