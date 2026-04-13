@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Monitor, Cloud } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { useClipStore } from "../stores/useClipStore";
 import { useQueueStore } from "../stores/useQueueStore";
-import { ClipState, JobType, BackendMode } from "../lib/types";
+import { ClipState, JobType } from "../lib/types";
 import { createJob } from "../lib/api";
-import ServerSetup from "./ServerSetup";
 import { useResizeHandle } from "../lib/useResizeHandle";
 
 const ALPHA_MODELS = ["GVM AUTO", "VIDEOMAMA"] as const;
@@ -45,7 +44,7 @@ export default function ParameterPanel() {
   };
 
   return (
-    <div className="border-l border-[var(--border)] bg-[var(--surface)] shrink-0 relative flex flex-col overflow-y-auto" style={{ width: panelWidth }}>
+    <div className="border-l border-[var(--border)] bg-[var(--surface)] shrink-0 relative overflow-y-auto" style={{ width: panelWidth }}>
       {/* Panel title */}
       <div className="px-4 py-2.5 text-xs font-bold tracking-[0.2em] uppercase text-[var(--text-bright)] border-b border-[var(--border)]">
         SETTINGS
@@ -223,93 +222,12 @@ export default function ParameterPanel() {
         </button>
       </Section>
 
-      {/* Spacer to push connection status to bottom */}
-      <div className="flex-1" />
-
-      {/* Connection status */}
-      <ConnectionStatus />
-
       {/* Drag handle */}
       <div
         onMouseDown={onResizeMouseDown}
         className="w-1 cursor-col-resize hover:bg-[var(--accent)] transition-colors absolute top-0 bottom-0 left-0 z-10"
       />
     </div>
-  );
-}
-
-function ConnectionStatus() {
-  const connectionStatus = useSettingsStore((s) => s.connectionStatus);
-  const backendMode = useSettingsStore((s) => s.backendMode);
-  const gpu = useSettingsStore((s) => s.gpu);
-  const isConnected = connectionStatus === "connected";
-  const [setupOpen, setSetupOpen] = useState(false);
-
-  return (
-    <>
-      <div className="border-t border-[var(--border)] px-4 py-3 shrink-0">
-        {/* Backend mode selector */}
-        <div className="flex items-center gap-2 mb-3">
-          <button
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] uppercase tracking-wider font-bold border transition-colors ${
-              backendMode === BackendMode.LOCAL
-                ? "border-[var(--text-muted)] text-[var(--text)] bg-[var(--surface-2)]"
-                : "border-[var(--border)] text-[var(--text-muted)] cursor-pointer hover:border-[var(--text-muted)]"
-            }`}
-          >
-            <Monitor size={10} />
-            LOCAL
-          </button>
-          <div
-            className="flex-1 flex flex-col items-center justify-center py-1.5 text-[9px] uppercase tracking-wider font-bold border border-[var(--border)] text-[var(--text-muted)] opacity-40 cursor-not-allowed"
-          >
-            <div className="flex items-center gap-1.5">
-              <Cloud size={10} />
-              CLOUD
-            </div>
-            <span className="text-[7px] font-normal normal-case tracking-normal opacity-70 mt-0.5">coming soon</span>
-          </div>
-        </div>
-
-        {/* Connection status */}
-        <div className="flex items-center gap-2 mb-2">
-          <div
-            className="w-2 h-2 shrink-0"
-            style={{
-              background: isConnected ? "var(--success)" : connectionStatus === "connecting" ? "var(--warning)" : "var(--error)",
-            }}
-          />
-          <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--text)]">
-            {isConnected ? "CONNECTED" : "NOT CONNECTED"}
-          </span>
-        </div>
-        {isConnected ? (
-          <div className="flex items-center gap-2 text-[9px] text-[var(--text-muted)]">
-            <Monitor size={10} />
-            <span>{gpu.name}</span>
-            {gpu.vramTotal > 0 && (
-              <span>{gpu.vramUsed.toFixed(1)}/{gpu.vramTotal.toFixed(1)} GB</span>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <p className="text-[9px] text-[var(--text-muted)] leading-relaxed">
-              Start the local server to begin keying.
-            </p>
-            <div className="bg-[#0a0a0a] border border-[var(--border)] px-2.5 py-1.5 text-[9px] text-[var(--text)] font-mono">
-              corridorkey-studio serve
-            </div>
-            <button
-              onClick={() => setSetupOpen(true)}
-              className="text-[9px] text-[var(--accent)] hover:underline cursor-pointer text-left"
-            >
-              Full setup guide
-            </button>
-          </div>
-        )}
-      </div>
-      {setupOpen && <ServerSetup onClose={() => setSetupOpen(false)} />}
-    </>
   );
 }
 
