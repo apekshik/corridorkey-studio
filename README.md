@@ -20,13 +20,13 @@ CorridorKey Studio wraps the [CorridorKey](https://github.com/CorridorDigital/Co
 - **Parameter tuning** — despill, despeckle, refiner, color space, live preview
 - **Media panel** — manage multiple clips, filter by state, track progress
 - **Job queue** — batch process clips with real-time progress
-- **Local or cloud** — run on your GPU or connect to a cloud backend
+- **Local or cloud** — run on your GPU or use the free cloud backend — no payment, no account required
 
 ## Stack
 
 - **Frontend**: Next.js, React, Tailwind CSS, Zustand
 - **Backend** (coming soon): FastAPI wrapping CorridorKey, GVM, and VideoMaMa models
-- **Cloud option** (coming soon): fal.ai serverless GPU inference
+- **Cloud option** (coming soon): fal.ai serverless GPU inference — free to use
 
 ## Getting started
 
