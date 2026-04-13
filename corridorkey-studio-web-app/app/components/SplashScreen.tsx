@@ -11,7 +11,7 @@ const SHOWCASE_IMAGES = [
 
 export default function SplashScreen() {
   const [phase, setPhase] = useState<"in" | "visible" | "fading" | "gone">("in");
-  const [imageIndex, setImageIndex] = useState(0);
+  const [imageIndex] = useState(() => Math.floor(Math.random() * SHOWCASE_IMAGES.length));
   const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
@@ -24,16 +24,6 @@ export default function SplashScreen() {
       clearTimeout(t3);
     };
   }, []);
-
-  // Cycle through images
-  useEffect(() => {
-    if (phase === "gone" || imageError) return;
-    const t = setInterval(
-      () => setImageIndex((i) => (i + 1) % SHOWCASE_IMAGES.length),
-      800
-    );
-    return () => clearInterval(t);
-  }, [phase, imageError]);
 
   if (phase === "gone") return null;
 
