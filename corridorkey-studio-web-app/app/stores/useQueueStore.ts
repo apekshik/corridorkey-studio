@@ -17,7 +17,7 @@ interface QueueStore {
 
 export const useQueueStore = create<QueueStore>((set) => ({
   jobs: [],
-  isOpen: false,
+  isOpen: true,
 
   toggleQueue: () => set((s) => ({ isOpen: !s.isOpen })),
 
