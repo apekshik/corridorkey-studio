@@ -15,6 +15,7 @@ from corridorkey_studio.services.clip_manager import ClipManager
 from corridorkey_studio.services.frame_store import FrameStore
 from corridorkey_studio.services.gpu import GPUService
 from corridorkey_studio.services.job_queue import JobQueue
+from corridorkey_studio.services.model_manager import ModelManager
 from corridorkey_studio.utils.errors import register_error_handlers
 
 
@@ -27,10 +28,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.frame_store = FrameStore(settings.data_dir / "projects")
     app.state.clip_manager = ClipManager(settings.data_dir, app.state.frame_store)
 
+    # Model manager — handles GPU lock + model switching
+    app.state.model_manager = ModelManager()
+
     # Job queue — wire up service references
     job_queue = JobQueue()
     job_queue.clip_manager = app.state.clip_manager
     job_queue.frame_store = app.state.frame_store
+    job_queue.model_manager = app.state.model_manager
     job_queue.start_worker()
     app.state.job_queue = job_queue
 
@@ -38,6 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Shutdown
     await job_queue.stop_worker()
+    app.state.model_manager.unload_all()
 
 
 def create_app() -> FastAPI:

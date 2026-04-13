@@ -45,10 +45,10 @@ class JobQueue:
         self._jobs: dict[str, JobRecord] = {}
         self._worker_task: asyncio.Task | None = None
         self._subscribers: list[asyncio.Queue[SSEEvent]] = []
-        self._handlers: dict[JobType, object] = {}
         # These get set by app lifespan after services are initialized
         self.clip_manager = None
         self.frame_store = None
+        self.model_manager = None
 
     def start_worker(self) -> None:
         """Start the background worker loop."""
@@ -193,10 +193,14 @@ class JobQueue:
 
         if job.type == JobType.VIDEO_EXTRACT:
             await self._run_video_extract(record)
-        elif job.type in (JobType.INFERENCE, JobType.GVM_ALPHA, JobType.VIDEOMAMA_ALPHA, JobType.PREVIEW):
-            # Stub: these will be wired up in Phase 4
-            logger.warning("Job type %s not yet implemented, completing as stub", job.type.value)
-            job.progress = 1.0
+        elif job.type == JobType.GVM_ALPHA:
+            await self._run_gvm_alpha(record)
+        elif job.type == JobType.VIDEOMAMA_ALPHA:
+            await self._run_videomama_alpha(record)
+        elif job.type == JobType.INFERENCE:
+            await self._run_inference(record)
+        elif job.type == JobType.PREVIEW:
+            await self._run_preview(record)
         else:
             raise ValueError(f"Unknown job type: {job.type}")
 
@@ -252,6 +256,207 @@ class JobQueue:
             "id": clip_id,
             "state": "RAW",
         }))
+
+    async def _run_gvm_alpha(self, record: JobRecord) -> None:
+        """Generate alpha hints using GVM for all input frames."""
+        from corridorkey_studio.services.model_manager import ActiveModel
+        from corridorkey_studio.utils.image_io import read_image, write_png
+
+        clip_id = record.clip_id
+        job = record.job
+        loop = asyncio.get_event_loop()
+
+        # Get input frames
+        input_frames = self.frame_store.list_frames(clip_id, "input")
+        if not input_frames:
+            raise FileNotFoundError(f"No input frames for clip {clip_id}")
+        job.total_frames = len(input_frames)
+
+        # Load GVM model (evicts any other model)
+        service = await loop.run_in_executor(
+            None, lambda: self.model_manager.ensure_model(ActiveModel.GVM)
+        )
+
+        alpha_dir = self.frame_store.frames_dir(clip_id, "alpha_hint")
+
+        for i, frame_num in enumerate(input_frames):
+            if record.is_cancelled:
+                return
+
+            # Skip already-generated hints (resume support)
+            if self.frame_store.find_frame_file(clip_id, "alpha_hint", frame_num):
+                job.current_frame = i + 1
+                continue
+
+            frame_path = self.frame_store.find_frame_file(clip_id, "input", frame_num)
+            frame = await loop.run_in_executor(None, lambda p=frame_path: read_image(p))
+
+            # Run inference in thread (holds GPU lock internally)
+            result = await loop.run_in_executor(
+                None, lambda f=frame: service.process_frame(f)
+            )
+
+            # Write alpha hint
+            hint = result["alpha_hint"]
+            out_path = alpha_dir / f"{frame_num:06d}.png"
+            await loop.run_in_executor(None, lambda p=out_path, h=hint: write_png(p, h))
+
+            # Progress
+            await self._report_progress(record, i + 1, len(input_frames))
+
+        # Transition clip: RAW/MASKED → READY
+        self.clip_manager.transition_state(clip_id, ClipState.READY)
+        await self._broadcast(SSEEvent("clip:state", {"id": clip_id, "state": "READY"}))
+
+    async def _run_videomama_alpha(self, record: JobRecord) -> None:
+        """Generate alpha hints using VideoMaMa (artist-guided)."""
+        from corridorkey_studio.services.model_manager import ActiveModel
+        from corridorkey_studio.utils.image_io import read_image, write_png
+
+        clip_id = record.clip_id
+        job = record.job
+        loop = asyncio.get_event_loop()
+
+        input_frames = self.frame_store.list_frames(clip_id, "input")
+        if not input_frames:
+            raise FileNotFoundError(f"No input frames for clip {clip_id}")
+        job.total_frames = len(input_frames)
+
+        # Load VideoMaMa model
+        service = await loop.run_in_executor(
+            None, lambda: self.model_manager.ensure_model(ActiveModel.VIDEOMAMA)
+        )
+
+        # Load annotation masks (keyframes painted by the artist)
+        ann_dir = self.frame_store.project_dir(clip_id) / "annotations"
+        alpha_dir = self.frame_store.frames_dir(clip_id, "alpha_hint")
+
+        for i, frame_num in enumerate(input_frames):
+            if record.is_cancelled:
+                return
+
+            if self.frame_store.find_frame_file(clip_id, "alpha_hint", frame_num):
+                job.current_frame = i + 1
+                continue
+
+            frame_path = self.frame_store.find_frame_file(clip_id, "input", frame_num)
+            frame = await loop.run_in_executor(None, lambda p=frame_path: read_image(p))
+
+            # Check if this frame has an annotation mask
+            mask = None
+            mask_path = ann_dir / f"{frame_num:06d}.json"
+            # For stub: no actual mask loading — real impl reads brush strokes
+
+            result = await loop.run_in_executor(
+                None, lambda f=frame, m=mask: service.process_frame(f, mask=m)
+            )
+
+            hint = result["alpha_hint"]
+            out_path = alpha_dir / f"{frame_num:06d}.png"
+            await loop.run_in_executor(None, lambda p=out_path, h=hint: write_png(p, h))
+
+            await self._report_progress(record, i + 1, len(input_frames))
+
+        self.clip_manager.transition_state(clip_id, ClipState.READY)
+        await self._broadcast(SSEEvent("clip:state", {"id": clip_id, "state": "READY"}))
+
+    async def _run_inference(self, record: JobRecord) -> None:
+        """Run CorridorKey keying — frames + alpha hints → FG/matte/comp/processed."""
+        from corridorkey_studio.services.model_manager import ActiveModel
+        from corridorkey_studio.utils.image_io import read_image, write_exr, write_png
+
+        clip_id = record.clip_id
+        job = record.job
+        params = record.params or {}
+        loop = asyncio.get_event_loop()
+
+        input_frames = self.frame_store.list_frames(clip_id, "input")
+        if not input_frames:
+            raise FileNotFoundError(f"No input frames for clip {clip_id}")
+        job.total_frames = len(input_frames)
+
+        # Load CorridorKey model
+        service = await loop.run_in_executor(
+            None, lambda: self.model_manager.ensure_model(ActiveModel.CORRIDORKEY)
+        )
+
+        for i, frame_num in enumerate(input_frames):
+            if record.is_cancelled:
+                return
+
+            # Skip already-keyed frames (resume)
+            if self.frame_store.find_frame_file(clip_id, "matte", frame_num):
+                job.current_frame = i + 1
+                continue
+
+            # Read input frame
+            frame_path = self.frame_store.find_frame_file(clip_id, "input", frame_num)
+            frame = await loop.run_in_executor(None, lambda p=frame_path: read_image(p))
+
+            # Read alpha hint if available
+            alpha_hint = None
+            hint_path = self.frame_store.find_frame_file(clip_id, "alpha_hint", frame_num)
+            if hint_path:
+                alpha_hint = await loop.run_in_executor(None, lambda p=hint_path: read_image(p))
+                # Convert to single channel if needed
+                if alpha_hint.ndim == 3:
+                    alpha_hint = alpha_hint[..., 0]
+
+            # Run keying
+            result = await loop.run_in_executor(
+                None, lambda f=frame, a=alpha_hint: service.process_frame(f, alpha_hint=a, **params)
+            )
+
+            # Write outputs (default to png for stub, real impl respects OutputConfig)
+            for layer_name, data in result.items():
+                out_dir = self.frame_store.frames_dir(clip_id, layer_name)
+                out_path = out_dir / f"{frame_num:06d}.png"
+                await loop.run_in_executor(None, lambda p=out_path, d=data: write_png(p, d))
+
+            await self._report_progress(record, i + 1, len(input_frames))
+
+        # Transition to COMPLETE
+        self.clip_manager.transition_state(clip_id, ClipState.COMPLETE)
+        await self._broadcast(SSEEvent("clip:state", {"id": clip_id, "state": "COMPLETE"}))
+
+    async def _run_preview(self, record: JobRecord) -> None:
+        """Single-frame preview inference (for live preview toggle)."""
+        from corridorkey_studio.services.model_manager import ActiveModel
+        from corridorkey_studio.utils.image_io import read_image, write_png
+
+        clip_id = record.clip_id
+        params = record.params or {}
+        loop = asyncio.get_event_loop()
+
+        clip = self.clip_manager.get_clip(clip_id)
+        frame_num = clip.current_frame
+
+        service = await loop.run_in_executor(
+            None, lambda: self.model_manager.ensure_model(ActiveModel.CORRIDORKEY)
+        )
+
+        frame_path = self.frame_store.find_frame_file(clip_id, "input", frame_num)
+        if not frame_path:
+            raise FileNotFoundError(f"Input frame {frame_num} not found")
+        frame = await loop.run_in_executor(None, lambda p=frame_path: read_image(p))
+
+        alpha_hint = None
+        hint_path = self.frame_store.find_frame_file(clip_id, "alpha_hint", frame_num)
+        if hint_path:
+            alpha_hint = await loop.run_in_executor(None, lambda p=hint_path: read_image(p))
+            if alpha_hint.ndim == 3:
+                alpha_hint = alpha_hint[..., 0]
+
+        result = await loop.run_in_executor(
+            None, lambda f=frame, a=alpha_hint: service.process_frame(f, alpha_hint=a, **params)
+        )
+
+        for layer_name, data in result.items():
+            out_dir = self.frame_store.frames_dir(clip_id, layer_name)
+            out_path = out_dir / f"{frame_num:06d}.png"
+            await loop.run_in_executor(None, lambda p=out_path, d=data: write_png(p, d))
+
+        record.job.progress = 1.0
 
     async def _report_progress(self, record: JobRecord, current: int, total: int) -> None:
         """Update job progress and broadcast to SSE subscribers."""
