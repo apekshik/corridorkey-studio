@@ -12,6 +12,7 @@ class Settings:
     host: str = "0.0.0.0"
     port: int = 8000
     data_dir: Path = field(default_factory=lambda: Path.home() / ".corridorkey-studio")
+    corridorkey_path: Path | None = None  # Path to CorridorKey repo root
     cors_origins: list[str] = field(
         default_factory=lambda: [
             "http://localhost:3000",
@@ -28,6 +29,9 @@ class Settings:
         data_dir_env = os.environ.get("CK_DATA_DIR")
         if data_dir_env:
             self.data_dir = Path(data_dir_env)
+        ck_path_env = os.environ.get("CK_CORRIDORKEY_PATH")
+        if ck_path_env:
+            self.corridorkey_path = Path(ck_path_env)
 
     def ensure_dirs(self) -> None:
         """Create required directories."""

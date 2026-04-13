@@ -22,18 +22,32 @@ def main() -> None:
 @click.option("--host", default=None, help="Bind host (default: 0.0.0.0)")
 @click.option("--port", default=None, type=int, help="Bind port (default: 8000)")
 @click.option("--data-dir", default=None, help="Data directory (default: ~/.corridorkey-studio)")
-def serve(host: str | None, port: int | None, data_dir: str | None) -> None:
+@click.option("--corridorkey-path", default=None, help="Path to CorridorKey repo (for model imports)")
+def serve(host: str | None, port: int | None, data_dir: str | None, corridorkey_path: str | None) -> None:
     """Start the CorridorKey Studio server."""
+    import os
+    import sys
     import uvicorn
+    from pathlib import Path
+
+    # Enable MPS fallback for ops not yet implemented on Apple Metal
+    os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
     if host:
         settings.host = host
     if port:
         settings.port = port
     if data_dir:
-        from pathlib import Path
-
         settings.data_dir = Path(data_dir)
+    if corridorkey_path:
+        settings.corridorkey_path = Path(corridorkey_path)
+
+    # Add CorridorKey repo to sys.path so we can import CorridorKeyModule, gvm_core, etc.
+    if settings.corridorkey_path and settings.corridorkey_path.exists():
+        ck_str = str(settings.corridorkey_path)
+        if ck_str not in sys.path:
+            sys.path.insert(0, ck_str)
+            console.print(f"  [dim]CorridorKey: {ck_str}[/]")
 
     settings.ensure_dirs()
 

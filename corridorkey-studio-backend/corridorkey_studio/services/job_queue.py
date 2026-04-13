@@ -260,49 +260,34 @@ class JobQueue:
     async def _run_gvm_alpha(self, record: JobRecord) -> None:
         """Generate alpha hints using GVM for all input frames."""
         from corridorkey_studio.services.model_manager import ActiveModel
-        from corridorkey_studio.utils.image_io import read_image, write_png
 
         clip_id = record.clip_id
         job = record.job
         loop = asyncio.get_event_loop()
 
-        # Get input frames
         input_frames = self.frame_store.list_frames(clip_id, "input")
         if not input_frames:
             raise FileNotFoundError(f"No input frames for clip {clip_id}")
         job.total_frames = len(input_frames)
 
-        # Load GVM model (evicts any other model)
+        # Load GVM (evicts any other model)
         service = await loop.run_in_executor(
             None, lambda: self.model_manager.ensure_model(ActiveModel.GVM)
         )
 
+        input_dir = self.frame_store.frames_dir(clip_id, "input")
         alpha_dir = self.frame_store.frames_dir(clip_id, "alpha_hint")
 
-        for i, frame_num in enumerate(input_frames):
-            if record.is_cancelled:
-                return
+        # GVM works on sequences — use process_sequence for both real and stub
+        def _progress(current: int, total: int) -> None:
+            job.current_frame = current
+            job.total_frames = total
+            job.progress = current / total if total > 0 else 0
 
-            # Skip already-generated hints (resume support)
-            if self.frame_store.find_frame_file(clip_id, "alpha_hint", frame_num):
-                job.current_frame = i + 1
-                continue
-
-            frame_path = self.frame_store.find_frame_file(clip_id, "input", frame_num)
-            frame = await loop.run_in_executor(None, lambda p=frame_path: read_image(p))
-
-            # Run inference in thread (holds GPU lock internally)
-            result = await loop.run_in_executor(
-                None, lambda f=frame: service.process_frame(f)
-            )
-
-            # Write alpha hint
-            hint = result["alpha_hint"]
-            out_path = alpha_dir / f"{frame_num:06d}.png"
-            await loop.run_in_executor(None, lambda p=out_path, h=hint: write_png(p, h))
-
-            # Progress
-            await self._report_progress(record, i + 1, len(input_frames))
+        await loop.run_in_executor(
+            None,
+            lambda: service.process_sequence(input_dir, alpha_dir, progress_callback=_progress),
+        )
 
         # Transition clip: RAW/MASKED → READY
         self.clip_manager.transition_state(clip_id, ClipState.READY)
