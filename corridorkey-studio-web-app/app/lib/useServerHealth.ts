@@ -18,13 +18,10 @@ async function fetchHealth(serverUrl: string) {
 export function useServerHealth() {
   const serverUrl = useSettingsStore((s) => s.serverUrl);
   const backendMode = useSettingsStore((s) => s.backendMode);
-  const setConnectionStatus = useSettingsStore((s) => s.setConnectionStatus);
-  const setGPU = useSettingsStore((s) => s.setGPU);
   const wasConnectedRef = useRef(false);
-
   const enabled = backendMode === BackendMode.LOCAL;
 
-  const { data, status } = useQuery({
+  const { data, isSuccess, isError } = useQuery({
     queryKey: ["server-health", serverUrl],
     queryFn: () => fetchHealth(serverUrl),
     refetchInterval: 5000,
@@ -32,27 +29,28 @@ export function useServerHealth() {
     retry: false,
   });
 
-  // Sync query state → zustand store
   useEffect(() => {
+    const store = useSettingsStore.getState();
+
     if (!enabled) {
-      setConnectionStatus("disconnected");
+      store.setConnectionStatus("disconnected");
       wasConnectedRef.current = false;
       return;
     }
 
-    if (status === "success" && data) {
-      setConnectionStatus("connected");
-      if (data.gpu) setGPU(data.gpu);
+    if (isSuccess) {
+      console.log("[health] connected", data);
+      store.setConnectionStatus("connected");
+      if (data?.gpu) store.setGPU(data.gpu);
       if (!wasConnectedRef.current) {
         wasConnectedRef.current = true;
         useClipStore.getState().refreshClips();
         useQueueStore.getState().refreshJobs();
       }
-    } else if (status === "error") {
-      setConnectionStatus("disconnected");
+    } else if (isError) {
+      console.log("[health] disconnected");
+      store.setConnectionStatus("disconnected");
       wasConnectedRef.current = false;
-    } else if (status === "pending") {
-      setConnectionStatus("connecting");
     }
-  }, [status, data, enabled, setConnectionStatus, setGPU]);
+  }, [enabled, isSuccess, isError, data]);
 }

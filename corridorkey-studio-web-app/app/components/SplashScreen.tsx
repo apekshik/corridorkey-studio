@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const SHOWCASE_IMAGES = [
   "/showcase/corridorkey-splash-screen-1.png",
@@ -11,8 +11,16 @@ const SHOWCASE_IMAGES = [
 
 export default function SplashScreen() {
   const [phase, setPhase] = useState<"in" | "visible" | "fading" | "gone">("in");
-  const [imageIndex] = useState(() => Math.floor(Math.random() * SHOWCASE_IMAGES.length));
+  // Pick a fixed index for SSR to avoid hydration mismatch, then randomize on client
+  const [imageIndex, setImageIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
+  const hasRandomized = useRef(false);
+
+  if (!hasRandomized.current && typeof window !== "undefined") {
+    hasRandomized.current = true;
+    const idx = Math.floor(Math.random() * SHOWCASE_IMAGES.length);
+    if (idx !== 0) setImageIndex(idx);
+  }
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("visible"), 200);

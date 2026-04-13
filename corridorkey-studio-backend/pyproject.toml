@@ -9,6 +9,20 @@ description = "Local GPU server for CorridorKey Studio — AI green screen keyin
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
+authors = [
+    { name = "Apekshik Panigrahi" },
+]
+keywords = ["green-screen", "keying", "vfx", "matte", "gpu", "ai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Multimedia :: Video",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
@@ -23,6 +37,11 @@ dependencies = [
 gpu = [
     "torch>=2.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/apekshik/corridorkey-studio"
+Repository = "https://github.com/apekshik/corridorkey-studio"
+Issues = "https://github.com/apekshik/corridorkey-studio/issues"
 
 [project.scripts]
 corridorkey-studio = "corridorkey_studio.cli:main"

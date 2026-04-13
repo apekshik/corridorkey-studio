@@ -1,11 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Check, Terminal, ExternalLink, X, RefreshCw } from "lucide-react";
+import { Copy, Check, Terminal, X, RefreshCw } from "lucide-react";
 import { useSettingsStore, type ConnectionStatus } from "../stores/useSettingsStore";
-
-const INSTALL_COMMAND = "pip install corridorkey-studio";
-const SERVE_COMMAND = "corridorkey-studio serve";
 
 export default function ServerSetup({ onClose }: { onClose: () => void }) {
   const connectionStatus = useSettingsStore((s) => s.connectionStatus);
@@ -50,16 +47,19 @@ export default function ServerSetup({ onClose }: { onClose: () => void }) {
             <>
               <Step number={1} title="INSTALL">
                 <p className="text-[var(--text-muted)] mb-2">
-                  Make sure you have Python 3.10+ and a CUDA-capable GPU, then install:
+                  Requires Python 3.10+ and git:
                 </p>
-                <CommandBlock command={INSTALL_COMMAND} />
+                <div className="flex flex-col gap-1.5">
+                  <CommandBlock command="pip install corridorkey-studio" />
+                </div>
               </Step>
 
               <Step number={2} title="START THE SERVER">
                 <p className="text-[var(--text-muted)] mb-2">
-                  This starts the local API server and downloads model weights on first run (~2GB):
+                  This starts the local server. On first run it automatically
+                  downloads the CorridorKey models (~400MB):
                 </p>
-                <CommandBlock command={SERVE_COMMAND} />
+                <CommandBlock command="corridorkey-studio serve" />
               </Step>
 
               <Step number={3} title="CONNECT">
@@ -71,13 +71,13 @@ export default function ServerSetup({ onClose }: { onClose: () => void }) {
 
               <div className="border-t border-[var(--border)] pt-4 mt-1">
                 <div className="text-[9px] uppercase tracking-[0.15em] text-[var(--text-muted)] font-bold mb-2">
-                  REQUIREMENTS
+                  SUPPORTED HARDWARE
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-[var(--text-muted)]">
-                  <span>Python 3.10+</span>
                   <span>NVIDIA GPU (CUDA)</span>
-                  <span>16GB+ VRAM recommended</span>
-                  <span>~2GB disk for weights</span>
+                  <span>Apple Silicon (MPS)</span>
+                  <span>8GB+ VRAM / unified memory</span>
+                  <span>Python 3.10+ &amp; git</span>
                 </div>
               </div>
             </>

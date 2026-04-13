@@ -28,6 +28,12 @@ class GPUService:
                 self._method = "torch"
                 logger.info("GPU detected via torch.cuda: %s", torch.cuda.get_device_name(0))
                 return
+
+            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                self._available = True
+                self._method = "mps"
+                logger.info("GPU detected via Apple MPS")
+                return
         except ImportError:
             pass
 
@@ -63,6 +69,8 @@ class GPUService:
 
         if self._method == "torch":
             return self._info_from_torch()
+        elif self._method == "mps":
+            return self._info_from_mps()
         elif self._method == "nvidia-smi":
             return self._info_from_smi()
         return _NO_GPU
@@ -82,6 +90,47 @@ class GPUService:
         except Exception:
             logger.exception("Failed to read GPU info via torch")
             return _NO_GPU
+
+    def _info_from_mps(self) -> GPUInfo:
+        """Apple Silicon — report chip name and total unified memory."""
+        try:
+            import platform
+            import subprocess
+
+            # Get chip name (e.g. "Apple M2 Pro")
+            chip = platform.processor() or "Apple Silicon"
+            # Try to get more specific name from sysctl
+            try:
+                result = subprocess.run(
+                    ["sysctl", "-n", "machdep.cpu.brand_string"],
+                    capture_output=True, text=True, timeout=2,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    chip = result.stdout.strip()
+            except Exception:
+                pass
+
+            # Get total system memory (unified memory = GPU memory on Apple Silicon)
+            total_gb = 0.0
+            try:
+                result = subprocess.run(
+                    ["sysctl", "-n", "hw.memsize"],
+                    capture_output=True, text=True, timeout=2,
+                )
+                if result.returncode == 0:
+                    total_gb = round(int(result.stdout.strip()) / (1024**3), 1)
+            except Exception:
+                pass
+
+            # MPS doesn't expose per-process VRAM usage, report 0
+            return GPUInfo(
+                name=f"{chip} (MPS)",
+                vram_used=0.0,
+                vram_total=total_gb,
+            )
+        except Exception:
+            logger.exception("Failed to read MPS info")
+            return GPUInfo(name="Apple Silicon (MPS)", vram_used=0.0, vram_total=0.0)
 
     def _info_from_smi(self) -> GPUInfo:
         try:
