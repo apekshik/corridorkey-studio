@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Monitor, Cloud, Settings, Play, Square, ChevronDown, Info, X } from "lucide-react";
+import { Monitor, Cloud, Settings, Play, Square, ChevronDown, Info, X, Wifi, WifiOff } from "lucide-react";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { BackendMode } from "../lib/types";
+import ServerSetup from "./ServerSetup";
 
 const KEY_MODES = [
   {
@@ -26,9 +27,11 @@ const KEY_MODES = [
 export default function TopBar() {
   const { backendMode, toggleBackendMode, gpu } = useSettingsStore();
   const vramPct = (gpu.vramUsed / gpu.vramTotal) * 100;
+  const connectionStatus = useSettingsStore((s) => s.connectionStatus);
   const [keyModeIndex, setKeyModeIndex] = useState(0);
   const [keyDropOpen, setKeyDropOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -138,6 +141,35 @@ export default function TopBar() {
             )}
             {backendMode}
           </button>
+
+          {/* Connection status indicator */}
+          {backendMode === BackendMode.LOCAL && (
+            <button
+              onClick={() => setSetupOpen(true)}
+              className={`flex items-center gap-1.5 px-2 py-1 text-[10px] uppercase tracking-wider cursor-pointer transition-colors ${
+                connectionStatus === "connected"
+                  ? "text-[var(--success)]"
+                  : connectionStatus === "connecting"
+                  ? "text-[var(--warning)]"
+                  : "text-[var(--error)]"
+              }`}
+              title={connectionStatus === "connected" ? "Server connected" : "Click to set up local server"}
+            >
+              <div
+                className="w-2 h-2"
+                style={{
+                  background:
+                    connectionStatus === "connected"
+                      ? "var(--success)"
+                      : connectionStatus === "connecting"
+                      ? "var(--warning)"
+                      : "var(--error)",
+                }}
+              />
+              {connectionStatus === "connected" ? "" : "SETUP"}
+            </button>
+          )}
+
           <button className="p-1 text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer transition-colors">
             <Settings size={14} />
           </button>
@@ -146,6 +178,8 @@ export default function TopBar() {
 
       {/* Info overlay */}
       {infoOpen && <InfoOverlay onClose={() => setInfoOpen(false)} />}
+      {/* Server setup overlay */}
+      {setupOpen && <ServerSetup onClose={() => setSetupOpen(false)} />}
     </>
   );
 }

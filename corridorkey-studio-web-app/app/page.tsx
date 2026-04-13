@@ -9,11 +9,15 @@ import ParameterPanel from "./components/ParameterPanel";
 import SidePanel from "./components/SidePanel";
 import { useQueueStore } from "./stores/useQueueStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
+import { useServerHealth } from "./lib/useServerHealth";
 
 export default function Home() {
   const toggleQueue = useQueueStore((s) => s.toggleQueue);
   const toggleSettings = useSettingsStore((s) => s.toggleSettingsPanel);
   const settingsOpen = useSettingsStore((s) => s.settingsPanelOpen);
+
+  // Poll local server health
+  useServerHealth();
 
   // Keyboard shortcuts
   useEffect(() => {

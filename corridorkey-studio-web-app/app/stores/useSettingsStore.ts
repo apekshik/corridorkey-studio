@@ -9,18 +9,24 @@ import {
 } from "../lib/types";
 import { MOCK_GPU } from "../lib/mock-data";
 
+export type ConnectionStatus = "disconnected" | "connecting" | "connected";
+
 interface SettingsStore {
   inferenceParams: InferenceParams;
   outputConfig: OutputConfig;
   backendMode: BackendMode;
   gpu: GPUInfo;
   settingsPanelOpen: boolean;
+  connectionStatus: ConnectionStatus;
+  serverUrl: string;
 
   setInferenceParam: <K extends keyof InferenceParams>(key: K, value: InferenceParams[K]) => void;
   setOutputConfig: <K extends keyof OutputConfig>(key: K, value: OutputConfig[K]) => void;
   toggleBackendMode: () => void;
   toggleSettingsPanel: () => void;
   setGPU: (gpu: GPUInfo) => void;
+  setConnectionStatus: (status: ConnectionStatus) => void;
+  setServerUrl: (url: string) => void;
 }
 
 export const useSettingsStore = create<SettingsStore>((set) => ({
@@ -29,6 +35,8 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   backendMode: BackendMode.LOCAL,
   gpu: MOCK_GPU,
   settingsPanelOpen: true,
+  connectionStatus: "disconnected",
+  serverUrl: "http://localhost:8000",
 
   setInferenceParam: (key, value) =>
     set((s) => ({
@@ -51,4 +59,6 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   toggleSettingsPanel: () => set((s) => ({ settingsPanelOpen: !s.settingsPanelOpen })),
 
   setGPU: (gpu) => set({ gpu }),
+  setConnectionStatus: (status) => set({ connectionStatus: status }),
+  setServerUrl: (url) => set({ serverUrl: url }),
 }));
