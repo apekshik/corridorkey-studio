@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
+import Providers from "./providers";
 import "./globals.css";
 
 const mono = JetBrains_Mono({
@@ -20,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${mono.variable} h-full`}>
       <body className="h-full overflow-hidden bg-[#0a0a0a] text-[#e0e0e0] font-mono">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

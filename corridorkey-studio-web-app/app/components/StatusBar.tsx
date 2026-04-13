@@ -102,7 +102,7 @@ export default function StatusBar() {
                 {gpu.name}{gpu.vramTotal > 0 ? ` · ${gpu.vramUsed.toFixed(1)}/${gpu.vramTotal.toFixed(1)} GB` : ""}
               </span>
             ) : (
-              <span className="uppercase tracking-wider">SETUP</span>
+              <span className="uppercase tracking-wider">SETUP NEEDED</span>
             )}
           </button>
         </div>
@@ -121,17 +121,10 @@ function ModeDropdown({
   backendMode: BackendMode;
   onClose: () => void;
 }) {
-  const [pos, setPos] = useState({ bottom: 0, right: 0 });
-
-  useEffect(() => {
-    if (dropRef.current) {
-      const rect = dropRef.current.getBoundingClientRect();
-      setPos({
-        bottom: window.innerHeight - rect.top + 4,
-        right: window.innerWidth - rect.right,
-      });
-    }
-  }, [dropRef]);
+  const rect = dropRef.current?.getBoundingClientRect();
+  const pos = rect
+    ? { bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right }
+    : { bottom: 40, right: 16 };
 
   return (
     <div
