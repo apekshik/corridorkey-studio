@@ -2,14 +2,11 @@
 
 import { useState, useEffect } from "react";
 
-// Drop images into public/showcase/ and they'll cycle here.
-// Name them 1.jpg, 2.jpg, etc.
 const SHOWCASE_IMAGES = [
-  "/showcase/1.jpg",
-  "/showcase/2.jpg",
-  "/showcase/3.jpg",
-  "/showcase/4.jpg",
-  "/showcase/5.jpg",
+  "/showcase/corridorkey-splash-screen-1.png",
+  "/showcase/corridorkey-splash-screen-2.png",
+  "/showcase/corridorkey-splash-screen-3.png",
+  "/showcase/corridorkey-splash-screen-4.png",
 ];
 
 export default function SplashScreen() {
