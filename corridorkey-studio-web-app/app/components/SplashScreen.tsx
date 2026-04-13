@@ -2,22 +2,25 @@
 
 import { useState, useEffect } from "react";
 
-// Replace these with real Corridor Crew / Niko frame URLs
+// Drop images into public/showcase/ and they'll cycle here.
+// Name them 1.jpg, 2.jpg, etc.
 const SHOWCASE_IMAGES = [
-  { label: "BEFORE", sublabel: "Raw green screen footage" },
-  { label: "ALPHA HINT", sublabel: "AI-generated foreground mask" },
-  { label: "MATTE", sublabel: "Production-quality key" },
-  { label: "FINAL COMP", sublabel: "Clean composite output" },
+  "/showcase/1.jpg",
+  "/showcase/2.jpg",
+  "/showcase/3.jpg",
+  "/showcase/4.jpg",
+  "/showcase/5.jpg",
 ];
 
 export default function SplashScreen() {
-  const [phase, setPhase] = useState<"loading" | "visible" | "fading" | "gone">("loading");
+  const [phase, setPhase] = useState<"in" | "visible" | "fading" | "gone">("in");
+  const [imageIndex, setImageIndex] = useState(0);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
-    // Show splash briefly, then fade out
-    const t1 = setTimeout(() => setPhase("visible"), 300);
-    const t2 = setTimeout(() => setPhase("fading"), 3000);
-    const t3 = setTimeout(() => setPhase("gone"), 3800);
+    const t1 = setTimeout(() => setPhase("visible"), 200);
+    const t2 = setTimeout(() => setPhase("fading"), 3500);
+    const t3 = setTimeout(() => setPhase("gone"), 4300);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
@@ -25,85 +28,85 @@ export default function SplashScreen() {
     };
   }, []);
 
+  // Cycle through images
+  useEffect(() => {
+    if (phase === "gone" || imageError) return;
+    const t = setInterval(
+      () => setImageIndex((i) => (i + 1) % SHOWCASE_IMAGES.length),
+      800
+    );
+    return () => clearInterval(t);
+  }, [phase, imageError]);
+
   if (phase === "gone") return null;
 
   return (
-    <div
-      className={`fixed inset-0 z-[100] bg-[#050505] flex flex-col items-center justify-center transition-opacity duration-700 ${
-        phase === "fading" ? "opacity-0" : "opacity-100"
-      }`}
-    >
-      {/* Brand */}
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div
-        className={`flex flex-col items-center transition-all duration-500 ${
-          phase === "loading" ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"
+        className={`bg-[var(--surface)] border border-[var(--border)] w-[520px] overflow-hidden transition-all duration-500 ${
+          phase === "in"
+            ? "opacity-0 scale-95"
+            : phase === "fading"
+            ? "opacity-0 scale-95"
+            : "opacity-100 scale-100"
         }`}
       >
-        <h1 className="text-2xl font-bold tracking-[0.3em] uppercase text-[var(--text-bright)] mb-2">
-          CORRIDORKEY STUDIO
-        </h1>
-        <p className="text-[11px] text-[var(--text-muted)] tracking-wider mb-10 max-w-md text-center leading-relaxed">
-          AI-powered green screen keying for production VFX.
-          <br />
-          Import footage, generate mattes, export clean keys.
-        </p>
-      </div>
-
-      {/* Showcase frames */}
-      <div
-        className={`flex gap-3 mb-12 transition-all duration-700 delay-200 ${
-          phase === "loading" ? "opacity-0 translate-y-6" : "opacity-100 translate-y-0"
-        }`}
-      >
-        {SHOWCASE_IMAGES.map((img, i) => (
-          <div key={i} className="flex flex-col items-center gap-2">
-            <div className="w-40 h-24 bg-[#111] border border-[var(--border)] flex items-center justify-center overflow-hidden">
-              {/* Replace with <img> when real frames are available */}
-              <div className="text-[9px] text-[var(--text-muted)] text-center px-2">
-                {img.label}
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-[8px] uppercase tracking-[0.15em] font-bold text-[var(--text)]">
-                {img.label}
-              </div>
-              <div className="text-[8px] text-[var(--text-muted)]">
-                {img.sublabel}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Loader */}
-      <div
-        className={`flex flex-col items-center gap-3 transition-all duration-500 delay-300 ${
-          phase === "loading" ? "opacity-0" : "opacity-100"
-        }`}
-      >
-        <div className="flex gap-1">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="w-6 h-0.5 bg-[var(--accent)]"
-              style={{
-                animation: `pulse 1.2s ease-in-out ${i * 0.15}s infinite`,
-                opacity: 0.3,
-              }}
+        {/* Image */}
+        <div className="w-full h-56 bg-[#0a0a0a] relative overflow-hidden">
+          {!imageError ? (
+            <img
+              key={imageIndex}
+              src={SHOWCASE_IMAGES[imageIndex]}
+              alt="CorridorKey showcase"
+              className="w-full h-full object-cover transition-opacity duration-300"
+              onError={() => setImageError(true)}
             />
-          ))}
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <span className="text-[var(--text-muted)] text-[10px] tracking-wider">
+                CORRIDORKEY STUDIO
+              </span>
+            </div>
+          )}
+          {/* Gradient overlay at bottom */}
+          <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[var(--surface)] to-transparent" />
         </div>
-        <span className="text-[9px] text-[var(--text-muted)] tracking-wider uppercase">
-          Loading workspace
-        </span>
-      </div>
 
-      <style jsx>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.2; }
-          50% { opacity: 1; }
-        }
-      `}</style>
+        {/* Content */}
+        <div className="px-6 pb-5 -mt-4 relative">
+          <h1 className="text-lg font-bold tracking-[0.25em] uppercase text-[var(--text-bright)] mb-2">
+            CORRIDORKEY STUDIO
+          </h1>
+          <p className="text-[11px] text-[var(--text-muted)] leading-relaxed mb-4">
+            AI-powered green screen keying for production VFX.
+            Import footage, generate mattes, and export clean keys
+            — locally on your GPU or on cloud GPUs for free.
+          </p>
+
+          {/* Loader bar */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-0.5 bg-[#222] overflow-hidden">
+              <div
+                className="h-full bg-[var(--accent)]"
+                style={{
+                  animation: "loadbar 2s ease-in-out infinite",
+                }}
+              />
+            </div>
+            <span className="text-[8px] text-[var(--text-muted)] tracking-wider uppercase shrink-0">
+              Loading
+            </span>
+          </div>
+        </div>
+
+        <style jsx>{`
+          @keyframes loadbar {
+            0% { width: 0%; margin-left: 0%; }
+            50% { width: 40%; margin-left: 30%; }
+            100% { width: 0%; margin-left: 100%; }
+          }
+        `}</style>
+      </div>
     </div>
   );
 }
