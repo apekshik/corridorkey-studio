@@ -1,0 +1,298 @@
+"use client";
+
+import { useState } from "react";
+import { ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { useSettingsStore } from "../stores/useSettingsStore";
+import { useClipStore } from "../stores/useClipStore";
+import { ClipState } from "../lib/types";
+
+const ALPHA_MODELS = ["GVM AUTO", "VIDEOMAMA"] as const;
+
+export default function ParameterPanel() {
+  const { inferenceParams, setInferenceParam, outputConfig, setOutputConfig } =
+    useSettingsStore();
+  const clips = useClipStore((s) => s.clips);
+  const selectedId = useClipStore((s) => s.selectedClipId);
+  const selectedClip = clips.find((c) => c.id === selectedId);
+  const isComplete = selectedClip?.state === ClipState.COMPLETE;
+  const isPartialKeyed =
+    selectedClip?.state === ClipState.READY &&
+    selectedClip.currentFrame > 0 &&
+    selectedClip.currentFrame < selectedClip.frameCount;
+  const canExport = isComplete || isPartialKeyed;
+  const [alphaModelIndex, setAlphaModelIndex] = useState(0);
+
+  const cycleModel = (dir: -1 | 1) => {
+    setAlphaModelIndex((i) => (i + dir + ALPHA_MODELS.length) % ALPHA_MODELS.length);
+  };
+
+  return (
+    <div className="w-[280px] border-l border-[var(--border)] bg-[var(--surface)] overflow-y-auto shrink-0">
+      {/* Panel title */}
+      <div className="px-4 py-2.5 text-xs font-bold tracking-[0.2em] uppercase text-[var(--text-bright)] border-b border-[var(--border)]">
+        SETTINGS
+      </div>
+
+      {/* Keying */}
+      <Section title="KEYING">
+        <ParamRow label="Color Space">
+          <select
+            className="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text)] text-[10px] px-2 py-0.5 w-20 cursor-pointer"
+            value={inferenceParams.inputIsLinear ? "linear" : "srgb"}
+            onChange={(e) =>
+              setInferenceParam("inputIsLinear", e.target.value === "linear")
+            }
+          >
+            <option value="srgb">sRGB</option>
+            <option value="linear">Linear</option>
+          </select>
+        </ParamRow>
+
+        <ParamRow label="Despill">
+          <div className="flex items-center gap-2 flex-1">
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={inferenceParams.despillStrength}
+              onChange={(e) =>
+                setInferenceParam("despillStrength", parseFloat(e.target.value))
+              }
+              className="flex-1"
+            />
+            <span className="text-[10px] text-[var(--text-muted)] tabular-nums w-8 text-right">
+              {inferenceParams.despillStrength.toFixed(2)}
+            </span>
+          </div>
+        </ParamRow>
+
+        <ParamRow label="Despeckle">
+          <div className="flex items-center gap-2">
+            <button
+              className={`w-4 h-4 border border-[var(--border)] flex items-center justify-center cursor-pointer ${
+                inferenceParams.autoDespeckle ? "bg-[var(--accent)]" : ""
+              }`}
+              onClick={() =>
+                setInferenceParam("autoDespeckle", !inferenceParams.autoDespeckle)
+              }
+            />
+            <input
+              type="number"
+              min={50}
+              max={2000}
+              value={inferenceParams.despeckleSize}
+              onChange={(e) =>
+                setInferenceParam("despeckleSize", parseInt(e.target.value) || 400)
+              }
+              disabled={!inferenceParams.autoDespeckle}
+              className="w-14 bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text)] text-[10px] px-1.5 py-0.5 tabular-nums disabled:opacity-30"
+            />
+          </div>
+        </ParamRow>
+
+        <ParamRow label="Refiner">
+          <div className="flex items-center gap-2 flex-1">
+            <input
+              type="range"
+              min={0}
+              max={3}
+              step={0.1}
+              value={inferenceParams.refinerScale}
+              onChange={(e) =>
+                setInferenceParam("refinerScale", parseFloat(e.target.value))
+              }
+              className="flex-1"
+            />
+            <span className="text-[10px] text-[var(--text-muted)] tabular-nums w-8 text-right">
+              {inferenceParams.refinerScale.toFixed(1)}
+            </span>
+          </div>
+        </ParamRow>
+
+        <ParamRow label="Live Preview">
+          <button
+            className={`w-4 h-4 border border-[var(--border)] flex items-center justify-center cursor-pointer ${
+              inferenceParams.livePreview ? "bg-[var(--accent)]" : ""
+            }`}
+            onClick={() =>
+              setInferenceParam("livePreview", !inferenceParams.livePreview)
+            }
+          />
+        </ParamRow>
+      </Section>
+
+      {/* Alpha Generation */}
+      <Section title="ALPHA GENERATION">
+        <div className="flex items-center border border-[var(--border)]">
+          <button
+            onClick={() => cycleModel(-1)}
+            className="px-2 py-1.5 text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer transition-colors border-r border-[var(--border)]"
+          >
+            <ChevronLeft size={12} />
+          </button>
+          <span className="flex-1 text-center text-[10px] uppercase tracking-wider font-bold text-[var(--text)] py-1.5">
+            {ALPHA_MODELS[alphaModelIndex]}
+          </span>
+          <button
+            onClick={() => cycleModel(1)}
+            className="px-2 py-1.5 text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer transition-colors border-l border-[var(--border)]"
+          >
+            <ChevronRight size={12} />
+          </button>
+        </div>
+        <div className="flex gap-2">
+          <ActionButton label="GENERATE" accent />
+          <ActionButton label="EXPORT MASKS" />
+        </div>
+      </Section>
+
+      {/* Output Format */}
+      <Section title="EXPORT SETTINGS">
+        <OutputRow
+          label="FG"
+          enabled={outputConfig.fgEnabled}
+          format={outputConfig.fgFormat}
+          onToggle={() => setOutputConfig("fgEnabled", !outputConfig.fgEnabled)}
+          onFormat={(f) => setOutputConfig("fgFormat", f)}
+        />
+        <OutputRow
+          label="Matte"
+          enabled={outputConfig.matteEnabled}
+          format={outputConfig.matteFormat}
+          onToggle={() =>
+            setOutputConfig("matteEnabled", !outputConfig.matteEnabled)
+          }
+          onFormat={(f) => setOutputConfig("matteFormat", f)}
+        />
+        <OutputRow
+          label="Comp"
+          enabled={outputConfig.compEnabled}
+          format={outputConfig.compFormat}
+          onToggle={() =>
+            setOutputConfig("compEnabled", !outputConfig.compEnabled)
+          }
+          onFormat={(f) => setOutputConfig("compFormat", f)}
+        />
+        <OutputRow
+          label="Processed"
+          enabled={outputConfig.processedEnabled}
+          format={outputConfig.processedFormat}
+          onToggle={() =>
+            setOutputConfig("processedEnabled", !outputConfig.processedEnabled)
+          }
+          onFormat={(f) => setOutputConfig("processedFormat", f)}
+        />
+        <button
+          disabled={!canExport}
+          className={`w-full py-2 mt-2 flex flex-col items-center justify-center gap-0.5 text-[10px] uppercase tracking-wider font-bold transition-colors ${
+            isComplete
+              ? "bg-[var(--accent)] text-[var(--text-bright)] cursor-pointer hover:bg-[var(--accent-dim)]"
+              : isPartialKeyed
+              ? "bg-[var(--warning)] text-[var(--bg)] cursor-pointer hover:brightness-110"
+              : "bg-[var(--surface-2)] text-[var(--text-muted)] opacity-40 cursor-not-allowed"
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <Download size={12} />
+            {isPartialKeyed ? "EXPORT PARTIAL" : "EXPORT"}
+          </span>
+          {isPartialKeyed && selectedClip && (
+            <span className="text-[8px] font-normal normal-case tracking-normal opacity-80">
+              {selectedClip.currentFrame}/{selectedClip.frameCount} frames keyed
+            </span>
+          )}
+        </button>
+      </Section>
+    </div>
+  );
+}
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-b border-[var(--border)]">
+      <div className="px-4 py-2 text-[10px] uppercase tracking-[0.15em] text-[var(--text-bright)] font-bold">
+        {title}
+      </div>
+      <div className="px-4 pb-3 flex flex-col gap-2">{children}</div>
+    </div>
+  );
+}
+
+function ActionButton({ label, accent }: { label: string; accent?: boolean }) {
+  return (
+    <button
+      className={`w-full py-1.5 border text-[10px] uppercase tracking-wider font-bold cursor-pointer transition-colors ${
+        accent
+          ? "border-[var(--accent)] bg-[var(--accent)] text-white hover:bg-[var(--accent-dim)]"
+          : "border-[var(--border)] text-[var(--text)] hover:border-[var(--text-muted)] hover:bg-[var(--surface-2)]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ParamRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-[10px] text-[var(--text-muted)] shrink-0">
+        {label}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+function OutputRow({
+  label,
+  enabled,
+  format,
+  onToggle,
+  onFormat,
+}: {
+  label: string;
+  enabled: boolean;
+  format: "exr" | "png";
+  onToggle: () => void;
+  onFormat: (f: "exr" | "png") => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        className={`w-4 h-4 border border-[var(--border)] flex items-center justify-center cursor-pointer shrink-0 ${
+          enabled ? "bg-[var(--accent)]" : ""
+        }`}
+        onClick={onToggle}
+      />
+      <span
+        className={`text-[10px] flex-1 ${
+          enabled ? "text-[var(--text)]" : "text-[var(--text-muted)] opacity-50"
+        }`}
+      >
+        {label}
+      </span>
+      <select
+        className="bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text)] text-[10px] px-1.5 py-0.5 w-14 cursor-pointer disabled:opacity-30"
+        value={format}
+        onChange={(e) => onFormat(e.target.value as "exr" | "png")}
+        disabled={!enabled}
+      >
+        <option value="exr">exr</option>
+        <option value="png">png</option>
+      </select>
+    </div>
+  );
+}
