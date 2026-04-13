@@ -7,6 +7,7 @@ import { useQueueStore } from "../stores/useQueueStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { ClipState, CLIP_STATE_COLORS, JobStatus } from "../lib/types";
 import { importVideo, thumbnailUrl } from "../lib/api";
+import { useBlobUrl } from "../lib/useBlobUrl";
 import { useResizeHandle } from "../lib/useResizeHandle";
 
 type Tab = "MEDIA" | "QUEUE";
@@ -223,11 +224,7 @@ function ClipRow({
         className="w-10 h-10 shrink-0 border border-[var(--border)] bg-[#1a1a1a] flex items-center justify-center relative overflow-hidden"
       >
         {clip.thumbnailUrl ? (
-          <img
-            src={thumbnailUrl(clip.id)}
-            alt={clip.name}
-            className="w-full h-full object-cover"
-          />
+          <ThumbnailImg clipId={clip.id} name={clip.name} />
         ) : (
           <span className="text-[7px] text-[var(--text-muted)]">
             {clip.frameCount}f
@@ -307,4 +304,10 @@ function QueueTab({ jobs }: { jobs: ReturnType<typeof useQueueStore.getState>["j
       )}
     </>
   );
+}
+
+function ThumbnailImg({ clipId, name }: { clipId: string; name: string }) {
+  const blobSrc = useBlobUrl(thumbnailUrl(clipId));
+  if (!blobSrc) return null;
+  return <img src={blobSrc} alt={name} className="w-full h-full object-cover" />;
 }

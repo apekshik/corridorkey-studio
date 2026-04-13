@@ -6,6 +6,7 @@ import { useClipStore } from "../stores/useClipStore";
 import { useSettingsStore } from "../stores/useSettingsStore";
 import { ViewMode } from "../lib/types";
 import { frameUrl } from "../lib/api";
+import { useBlobUrl } from "../lib/useBlobUrl";
 
 const OUTPUT_MODES = [ViewMode.FG, ViewMode.MATTE, ViewMode.COMP, ViewMode.PROCESSED];
 const ALL_MODES = [ViewMode.INPUT, ...OUTPUT_MODES];
@@ -121,15 +122,24 @@ function FrameView({
   layer: string;
   connected: boolean;
 }) {
-  const [error, setError] = useState(false);
+  const url = connected ? frameUrl(clipId, frame, layer) : null;
+  const blobSrc = useBlobUrl(url);
 
-  if (!connected || error) {
+  if (!connected) {
     return (
       <div className="text-[var(--text-muted)] text-xs text-center">
         <div className="w-64 h-44 border border-[var(--border)] flex items-center justify-center mb-2 bg-[#1a1a1a]">
-          <span className="text-[10px]">
-            {!connected ? "SERVER OFFLINE" : `${layer.toUpperCase()} — FRAME ${frame}`}
-          </span>
+          <span className="text-[10px]">SERVER OFFLINE</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!blobSrc) {
+    return (
+      <div className="text-[var(--text-muted)] text-xs text-center">
+        <div className="w-64 h-44 border border-[var(--border)] flex items-center justify-center mb-2 bg-[#1a1a1a]">
+          <span className="text-[10px]">{layer.toUpperCase()} — FRAME {frame}</span>
         </div>
       </div>
     );
@@ -138,11 +148,9 @@ function FrameView({
   return (
     <img
       key={`${clipId}-${layer}-${frame}`}
-      src={frameUrl(clipId, frame, layer)}
+      src={blobSrc}
       alt={`${layer} frame ${frame}`}
       className="max-w-full max-h-full object-contain"
-      onError={() => setError(true)}
-      onLoad={() => setError(false)}
     />
   );
 }
