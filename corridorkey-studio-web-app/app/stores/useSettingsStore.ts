@@ -32,7 +32,7 @@ interface SettingsStore {
 export const useSettingsStore = create<SettingsStore>((set) => ({
   inferenceParams: DEFAULT_INFERENCE_PARAMS,
   outputConfig: DEFAULT_OUTPUT_CONFIG,
-  backendMode: BackendMode.LOCAL,
+  backendMode: BackendMode.CLOUD,
   gpu: { name: "—", vramUsed: 0, vramTotal: 0 },
   settingsPanelOpen: true,
   connectionStatus: "disconnected",

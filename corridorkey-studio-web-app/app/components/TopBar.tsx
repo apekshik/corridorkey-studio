@@ -7,6 +7,7 @@ import { useClipStore } from "../stores/useClipStore";
 import { useQueueStore } from "../stores/useQueueStore";
 import { JobType, JobStatus, ClipState } from "../lib/types";
 import { createJob, cancelJob } from "../lib/api";
+import UserMenu from "./UserMenu";
 
 const KEY_MODES = [
   {
@@ -207,6 +208,10 @@ export default function TopBar() {
           <button className="p-1 text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer transition-colors">
             <Settings size={14} />
           </button>
+
+          <div className="w-px h-4 bg-[var(--border)]" />
+
+          <UserMenu />
         </div>
       </div>
 

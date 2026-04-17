@@ -1,60 +1,21 @@
-"use client";
+import { withAuth } from "@workos-inc/authkit-nextjs";
+import StudioShell from "./StudioShell";
+import SignInScreen from "./components/SignInScreen";
 
-import { useEffect } from "react";
-import TopBar from "./components/TopBar";
-import StatusBar from "./components/StatusBar";
-import DualViewer from "./components/DualViewer";
-import FrameScrubber from "./components/FrameScrubber";
-import ParameterPanel from "./components/ParameterPanel";
-import SidePanel from "./components/SidePanel";
-import { useQueueStore } from "./stores/useQueueStore";
-import { useSettingsStore } from "./stores/useSettingsStore";
-import { useServerHealth } from "./lib/useServerHealth";
-import { useJobEvents } from "./lib/useJobEvents";
-import SplashScreen from "./components/SplashScreen";
+export default async function Home() {
+  const { user } = await withAuth();
 
-export default function Home() {
-  const toggleQueue = useQueueStore((s) => s.toggleQueue);
-  const toggleSettings = useSettingsStore((s) => s.toggleSettingsPanel);
-  const settingsOpen = useSettingsStore((s) => s.settingsPanelOpen);
-
-  // Poll local server health + subscribe to SSE job events
-  useServerHealth();
-  useJobEvents();
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (e.metaKey || e.ctrlKey) return;
-
-      switch (e.key) {
-        case "q":
-          toggleQueue();
-          break;
-        case "e":
-          toggleSettings();
-          break;
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [toggleQueue, toggleSettings]);
+  if (!user) {
+    return <SignInScreen />;
+  }
 
   return (
-    <div className="h-full flex flex-col">
-      <SplashScreen />
-      <TopBar />
-      <div className="flex flex-1 min-h-0">
-        <SidePanel />
-        <div className="flex flex-col flex-1 min-w-0">
-          <DualViewer />
-          <FrameScrubber />
-        </div>
-        {settingsOpen && <ParameterPanel />}
-      </div>
-      <StatusBar />
-    </div>
+    <StudioShell
+      workosUser={{
+        email: user.email,
+        name: user.firstName ?? undefined,
+        profileImageUrl: user.profilePictureUrl ?? undefined,
+      }}
+    />
   );
 }

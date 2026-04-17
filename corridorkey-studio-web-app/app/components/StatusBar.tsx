@@ -109,33 +109,42 @@ export default function StatusBar() {
             {modeDropOpen && <ModeDropdown dropRef={modeDropRef} backendMode={backendMode} onClose={() => setModeDropOpen(false)} />}
           </div>
 
-          {/* Connection status */}
-          <button
-            onClick={() => !isConnected && setSetupOpen(true)}
-            className={`flex items-center gap-1.5 text-[10px] transition-colors ${
-              isConnected
-                ? "text-[var(--success)]"
-                : "text-[var(--error)] cursor-pointer hover:text-[var(--text)]"
-            }`}
-          >
-            <div
-              className="w-2 h-2 shrink-0"
-              style={{
-                background: isConnected
-                  ? "var(--success)"
-                  : connectionStatus === "connecting"
-                  ? "var(--warning)"
-                  : "var(--error)",
-              }}
-            />
-            {isConnected ? (
-              <span className="text-[9px] text-[var(--text-muted)]">
-                {gpu.name}{gpu.vramUsed > 0 ? ` · ${gpu.vramUsed.toFixed(1)}/${gpu.vramTotal.toFixed(1)} GB` : ""}
+          {/* Connection indicator */}
+          {backendMode === BackendMode.CLOUD ? (
+            <div className="flex items-center gap-1.5 text-[10px]">
+              <div className="w-2 h-2 shrink-0 bg-[var(--success)]" />
+              <span className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider">
+                CLOUD READY
               </span>
-            ) : (
-              <span className="uppercase tracking-wider">SETUP NEEDED</span>
-            )}
-          </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => !isConnected && setSetupOpen(true)}
+              className={`flex items-center gap-1.5 text-[10px] transition-colors ${
+                isConnected
+                  ? "text-[var(--success)]"
+                  : "text-[var(--error)] cursor-pointer hover:text-[var(--text)]"
+              }`}
+            >
+              <div
+                className="w-2 h-2 shrink-0"
+                style={{
+                  background: isConnected
+                    ? "var(--success)"
+                    : connectionStatus === "connecting"
+                    ? "var(--warning)"
+                    : "var(--error)",
+                }}
+              />
+              {isConnected ? (
+                <span className="text-[9px] text-[var(--text-muted)]">
+                  {gpu.name}{gpu.vramUsed > 0 ? ` · ${gpu.vramUsed.toFixed(1)}/${gpu.vramTotal.toFixed(1)} GB` : ""}
+                </span>
+              ) : (
+                <span className="uppercase tracking-wider">SETUP NEEDED</span>
+              )}
+            </button>
+          )}
         </div>
         </div>
       </div>
@@ -166,23 +175,23 @@ function ModeDropdown({
       <button
         onClick={onClose}
         className={`w-full text-left px-3 py-2 cursor-pointer transition-colors border-b border-[var(--border)] ${
-          backendMode === BackendMode.LOCAL ? "bg-[var(--surface-2)]" : "hover:bg-[var(--surface-2)]"
+          backendMode === BackendMode.CLOUD ? "bg-[var(--surface-2)]" : "hover:bg-[var(--surface-2)]"
         }`}
       >
         <div className="flex items-center gap-2">
-          <Monitor size={12} className="text-[var(--text)]" />
+          <Cloud size={12} className="text-[var(--text)]" />
           <div>
-            <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text)]">LOCAL</div>
-            <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Run on your GPU</div>
+            <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text)]">CLOUD</div>
+            <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Free cloud GPUs — signed in via your account</div>
           </div>
         </div>
       </button>
       <div className="w-full text-left px-3 py-2 opacity-40 cursor-not-allowed">
         <div className="flex items-center gap-2">
-          <Cloud size={12} className="text-[var(--text-muted)]" />
+          <Monitor size={12} className="text-[var(--text-muted)]" />
           <div>
-            <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">CLOUD</div>
-            <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Free cloud GPUs with generous limits — coming soon</div>
+            <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">LOCAL</div>
+            <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Run on your own GPU — coming back soon</div>
           </div>
         </div>
       </div>
