@@ -80,7 +80,7 @@ export default function StudioShell({ projectId, workosUser }: StudioShellProps)
   return (
     <div className="h-full flex flex-col">
       <SplashScreen />
-      <TopBar />
+      <TopBar projectId={projectId} project={project} />
       <div className="flex flex-1 min-h-0">
         <SidePanel />
         <div className="flex flex-col flex-1 min-w-0">
