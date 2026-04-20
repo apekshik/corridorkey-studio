@@ -51,36 +51,11 @@
   --sectionlabel-h: 28px;
 }
 
-/* Density overrides — driven by <html data-density="..."> */
-html[data-density="comfort"] {
-  --pad: 14px;
-  --pad-sm: 10px;
-  --pad-xs: 6px;
-  --rail-w: 320px;
-  --params-w: 320px;
-  --topbar-h: 56px;
-  --sectionlabel-h: 32px;
-}
-html[data-density="ultra"] {
-  --pad: 7px;
-  --pad-sm: 5px;
-  --pad-xs: 4px;
-  --rail-w: 280px;
-  --params-w: 280px;
-  --topbar-h: 42px;
-  --sectionlabel-h: 24px;
-}
-
-/* Accent overrides */
-html[data-accent="yellow"] { --accent: #eab308; --accent-ink: #0b0c0e; }
-html[data-accent="orange"] { --accent: #ff5c1a; --accent-ink: #ffffff; }
-html[data-accent="ivory"]  { --accent: #f2efe8; --accent-ink: #0b0c0e; }
-/* green is the default at :root */
-
-/* Chrome weight overrides */
-html[data-chrome="hair"]  { --rule: #1d2025; --rule-strong: #2a2d33; }
-html[data-chrome="heavy"] { --rule: #3a3d44; --rule-strong: #52565e; }
-/* med is the default at :root */
+/* Shipped chrome — compact density, green accent, hair rules.
+ * The DESIGN_MOCK.html prototype exposed density/accent/chrome as live
+ * tweaks; that playground was design-only. For the real app we lock
+ * these defaults here and at the <html> data-* attributes in layout.tsx. */
+html { --rule: #1d2025; --rule-strong: #2a2d33; }
 
 @theme inline {
   --color-bg-0: var(--bg-0);

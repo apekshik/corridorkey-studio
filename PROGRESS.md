@@ -84,13 +84,10 @@ work in this slice.
 
 **Design system**
 - Token system from the prototype: `--bg-0..4`, `--ink-0..4`, `--rule`,
-  accent (configurable), `--serif` = Instrument Serif, `--mono` =
-  JetBrains Mono
-- `data-density | data-accent | data-chrome` attribute selectors on
-  `<html>`, driven by a persisted Zustand `useTweaksStore`
-- Shipped defaults: `accent=green, chrome=hair, density=compact, pending=off`
-- Floating **Tweaks** panel launched from the status bar (density / accent
-  / chrome / viewer layout / pending overlay)
+  `--accent`, `--serif` = Instrument Serif, `--mono` = JetBrains Mono
+- Shipped chrome: `accent=green, chrome=hair, density=compact`, pinned
+  in `globals.css` + `<html data-*>`. The prototype's live Tweaks panel
+  was a design-only playground; we do not ship a runtime selector.
 
 **Projects (stub-level CRUD, wired up but minimal)**
 - `projects` table: `{ userId, name, createdAt, updatedAt, coverClipId? }`
@@ -124,7 +121,7 @@ work in this slice.
   ADR-01 exactly
 - StatusBar: Cloud (stub `CLOUD`, no region), Queue, Stream pulse,
   Session cost (stubbed 0 until slice 5), Surge chip, keyboard
-  shortcut strip, Backend chip, TWEAKS button
+  shortcut strip, Backend chip
 
 **State changes**
 - Clip state enum adds `UPLOADING` (pre-extract) and `KEYING` (between
