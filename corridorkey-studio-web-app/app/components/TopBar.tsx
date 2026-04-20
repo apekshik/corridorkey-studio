@@ -5,12 +5,14 @@ import { useQuery } from "convex/react";
 import { ChevronDown, Download, Settings } from "lucide-react";
 import ProjectSwitcher from "./ProjectSwitcher";
 import UserMenu from "./UserMenu";
+import { useDirtyStore } from "../stores/useDirtyStore";
 import { api } from "../../convex/_generated/api";
 import { Doc, Id } from "../../convex/_generated/dataModel";
 
 interface Props {
   projectId: Id<"projects">;
   project: Doc<"projects"> | null | undefined;
+  onSave: () => void;
 }
 
 type KeyScope = "selected" | "ready" | "all";
@@ -20,7 +22,7 @@ const SCOPES: { id: KeyScope; label: string; sub: string }[] = [
   { id: "all", label: "Key Everything", sub: "Auto-generate hints for clips that need them" },
 ];
 
-export default function TopBar({ projectId, project }: Props) {
+export default function TopBar({ projectId, project, onSave }: Props) {
   const clips = useQuery(api.clips.listByProject, { projectId }) ?? [];
   const [keyScope, setKeyScope] = useState<KeyScope>("ready");
   const [scopeOpen, setScopeOpen] = useState(false);
@@ -103,7 +105,7 @@ export default function TopBar({ projectId, project }: Props) {
             <span className="text-[var(--ink-4)]">·</span>
             <span className="tabular-nums">{formatHMS(totalSeconds)} total</span>
             <span className="text-[var(--ink-4)]">·</span>
-            <SaveState />
+            <SaveState onSave={onSave} />
           </div>
         </div>
 
@@ -283,19 +285,54 @@ function IconButton({
   );
 }
 
-function SaveState() {
-  // Slice-3 stub — real dirty/save wiring lands with task #12.
-  const [dirty] = useState(false);
-  const label = dirty ? "unsaved" : "saved —:—";
+function SaveState({ onSave }: { onSave: () => void }) {
+  const dirty = useDirtyStore((s) => s.dirty);
+  const lastSavedAt = useDirtyStore((s) => s.lastSavedAt);
+
+  if (dirty) {
+    return (
+      <span className="inline-flex items-center gap-1.5 tabular-nums">
+        <span className="inline-flex items-center gap-1.5 text-[var(--warn)]">
+          <span
+            className="inline-block w-[5px] h-[5px] rounded-full"
+            style={{ background: "var(--warn)" }}
+          />
+          unsaved
+        </span>
+        <button
+          onClick={onSave}
+          className="ml-1 inline-flex items-center gap-1.5 px-2 py-[3px] text-[9.5px] uppercase tracking-[0.18em] font-semibold"
+          style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
+          title="Save (⌘S)"
+        >
+          Save
+          <span
+            className="text-[9px] tracking-[0.04em] border px-1 py-0 leading-[1.3]"
+            style={{
+              borderColor: "rgba(10,8,6,0.25)",
+              color: "var(--accent-ink)",
+              opacity: 0.55,
+            }}
+          >
+            ⌘S
+          </span>
+        </button>
+      </span>
+    );
+  }
+
   return (
     <span className="inline-flex items-center gap-1.5 tabular-nums">
-      <span
-        className={dirty ? "text-[var(--warn)]" : "text-[var(--ink-2)]"}
-      >
-        {label}
+      <span className="text-[var(--ink-2)]">
+        saved {lastSavedAt ? formatHM(lastSavedAt) : "—:—"}
       </span>
     </span>
   );
+}
+
+function formatHM(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 /* ------------------------------- helpers -------------------------------- */

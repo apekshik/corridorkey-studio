@@ -17,12 +17,40 @@ export default defineSchema({
   // and may contain slashes for display convention ("Atrium / Plate B")
   // but is semantically single-level. `coverClipId` is reserved for the
   // slice-5 cover picker; no UI in v1.
+  //
+  // `settings` holds the ADR-01 parameter surface at project scope so
+  // explicit save (⌘S) restores them across reloads. Per-clip overrides
+  // may come later, but the default workflow is project-wide for v1.
   projects: defineTable({
     userId: v.id("users"),
     name: v.string(),
     createdAt: v.number(),
     updatedAt: v.number(),
     coverClipId: v.optional(v.id("clips")),
+    settings: v.optional(
+      v.object({
+        inferenceParams: v.object({
+          inputIsLinear: v.boolean(),
+          despillStrength: v.number(),
+          autoDespeckle: v.boolean(),
+          despeckleSize: v.number(),
+          refinerScale: v.number(),
+        }),
+        outputConfig: v.object({
+          fgEnabled: v.boolean(),
+          fgFormat: v.union(v.literal("exr"), v.literal("png")),
+          fgPremult: v.union(v.literal("premult"), v.literal("straight")),
+          matteEnabled: v.boolean(),
+          matteFormat: v.union(v.literal("exr"), v.literal("png")),
+          compEnabled: v.boolean(),
+          compFormat: v.union(v.literal("exr"), v.literal("png")),
+          processedEnabled: v.boolean(),
+          processedFormat: v.union(v.literal("exr"), v.literal("png")),
+          generateCompPreview: v.boolean(),
+        }),
+        lastSavedAt: v.number(),
+      })
+    ),
   }).index("by_user", ["userId", "updatedAt"]),
 
   // A clip represents a source video a user has saved. Sessions that haven't

@@ -120,3 +120,50 @@ export const rename = mutation({
     });
   },
 });
+
+/**
+ * Persist parameter settings for the project (⌘S save). Accepts the full
+ * ADR-01 parameter surface. Returns the `lastSavedAt` timestamp so the
+ * UI can render "saved HH:MM" without racing the reactive query.
+ */
+export const saveSettings = mutation({
+  args: {
+    projectId: v.id("projects"),
+    inferenceParams: v.object({
+      inputIsLinear: v.boolean(),
+      despillStrength: v.number(),
+      autoDespeckle: v.boolean(),
+      despeckleSize: v.number(),
+      refinerScale: v.number(),
+    }),
+    outputConfig: v.object({
+      fgEnabled: v.boolean(),
+      fgFormat: v.union(v.literal("exr"), v.literal("png")),
+      fgPremult: v.union(v.literal("premult"), v.literal("straight")),
+      matteEnabled: v.boolean(),
+      matteFormat: v.union(v.literal("exr"), v.literal("png")),
+      compEnabled: v.boolean(),
+      compFormat: v.union(v.literal("exr"), v.literal("png")),
+      processedEnabled: v.boolean(),
+      processedFormat: v.union(v.literal("exr"), v.literal("png")),
+      generateCompPreview: v.boolean(),
+    }),
+  },
+  handler: async (ctx, { projectId, inferenceParams, outputConfig }) => {
+    const user = await requireUser(ctx);
+    const project = await ctx.db.get(projectId);
+    if (!project || project.userId !== user._id) {
+      throw new Error("Project not found or access denied");
+    }
+    const now = Date.now();
+    await ctx.db.patch(projectId, {
+      settings: {
+        inferenceParams,
+        outputConfig,
+        lastSavedAt: now,
+      },
+      updatedAt: now,
+    });
+    return now;
+  },
+});

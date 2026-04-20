@@ -14,6 +14,7 @@ import { useQueueStore } from "./stores/useQueueStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import { useServerHealth } from "./lib/useServerHealth";
 import { useJobEvents } from "./lib/useJobEvents";
+import { useProjectSettings } from "./lib/useProjectSettings";
 import { api } from "../convex/_generated/api";
 import { Id } from "../convex/_generated/dataModel";
 
@@ -33,6 +34,7 @@ export default function StudioShell({ projectId, workosUser }: StudioShellProps)
   const settingsOpen = useSettingsStore((s) => s.settingsPanelOpen);
   const getOrCreate = useMutation(api.users.getOrCreate);
   const project = useQuery(api.projects.get, { projectId });
+  const { save } = useProjectSettings(projectId, project);
 
   // Mirror the WorkOS identity into Convex on first render.
   useEffect(() => {
@@ -62,6 +64,13 @@ export default function StudioShell({ projectId, workosUser }: StudioShellProps)
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      // ⌘S / Ctrl-S — save project settings
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        save();
+        return;
+      }
       if (e.metaKey || e.ctrlKey) return;
 
       switch (e.key) {
@@ -75,12 +84,12 @@ export default function StudioShell({ projectId, workosUser }: StudioShellProps)
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleQueue, toggleSettings]);
+  }, [toggleQueue, toggleSettings, save]);
 
   return (
     <div className="h-full flex flex-col">
       <SplashScreen />
-      <TopBar projectId={projectId} project={project} />
+      <TopBar projectId={projectId} project={project} onSave={save} />
       <div className="flex flex-1 min-h-0">
         <SidePanel projectId={projectId} />
         <div className="flex flex-col flex-1 min-w-0">
