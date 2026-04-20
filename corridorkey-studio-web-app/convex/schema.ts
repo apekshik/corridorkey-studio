@@ -13,20 +13,38 @@ export default defineSchema({
     .index("by_workos_id", ["workosId"])
     .index("by_email", ["email"]),
 
+  // A project owns clips. Flat hierarchy (ADR-02) — the name is free-form
+  // and may contain slashes for display convention ("Atrium / Plate B")
+  // but is semantically single-level. `coverClipId` is reserved for the
+  // slice-5 cover picker; no UI in v1.
+  projects: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    coverClipId: v.optional(v.id("clips")),
+  }).index("by_user", ["userId", "updatedAt"]),
+
   // A clip represents a source video a user has saved. Sessions that haven't
   // been saved never hit this table — they live entirely in the browser.
+  //
+  // `projectId` is the stable owner (slice 3+). `userId` remains so auth
+  // checks are cheap without a second hop through `projects`.
   //
   // `previewFrameUrls` is an array of fal CDN URLs for 480p preview JPEGs,
   // one per source frame. Populated once by the extract fal app. Keying
   // outputs go to the `frames` table, not here.
   clips: defineTable({
     userId: v.id("users"),
+    projectId: v.optional(v.id("projects")),
     name: v.string(),
     state: v.union(
+      v.literal("UPLOADING"),
       v.literal("EXTRACTING"),
       v.literal("RAW"),
       v.literal("MASKED"),
       v.literal("READY"),
+      v.literal("KEYING"),
       v.literal("COMPLETE"),
       v.literal("ERROR")
     ),
@@ -59,6 +77,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId", "createdAt"])
+    .index("by_project", ["projectId", "createdAt"])
     .index("by_fal_extract_request", ["falExtractRequestId"]),
 
   // Output frames from keying. Sparse — rows only exist for frames that

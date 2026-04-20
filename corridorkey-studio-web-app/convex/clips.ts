@@ -1,6 +1,12 @@
 import { v } from "convex/values";
-import { mutation, query, internalMutation } from "./_generated/server";
-import { Doc, Id } from "./_generated/dataModel";
+import {
+  mutation,
+  query,
+  internalMutation,
+  QueryCtx,
+  MutationCtx,
+} from "./_generated/server";
+import { Doc } from "./_generated/dataModel";
 
 /**
  * Clips persist on explicit save. Queries + mutations here are user-scoped —
@@ -8,21 +14,13 @@ import { Doc, Id } from "./_generated/dataModel";
  * which we resolve to a Convex users row. No client-supplied userId arg.
  */
 
-async function getCurrentUser(ctx: {
-  auth: { getUserIdentity: () => Promise<{ subject: string } | null> };
-  db: {
-    query: (table: string) => {
-      withIndex: (name: string, fn: (q: { eq: (f: string, v: string) => unknown }) => unknown) => {
-        first: () => Promise<Doc<"users"> | null>;
-      };
-    };
-  };
-}): Promise<Doc<"users">> {
+async function getCurrentUser(
+  ctx: QueryCtx | MutationCtx
+): Promise<Doc<"users">> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not authenticated");
   const user = await ctx.db
     .query("users")
-    // @ts-expect-error — TS can't narrow the generic, runtime is correct
     .withIndex("by_workos_id", (q) => q.eq("workosId", identity.subject))
     .first();
   if (!user) {
@@ -48,6 +46,26 @@ export const list = query({
     return await ctx.db
       .query("clips")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .collect();
+  },
+});
+
+export const listByProject = query({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, { projectId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_workos_id", (q) => q.eq("workosId", identity.subject))
+      .first();
+    if (!user) return [];
+    const project = await ctx.db.get(projectId);
+    if (!project || project.userId !== user._id) return [];
+    return await ctx.db
+      .query("clips")
+      .withIndex("by_project", (q) => q.eq("projectId", projectId))
       .order("desc")
       .collect();
   },
@@ -80,6 +98,7 @@ export const get = query({
  */
 export const save = mutation({
   args: {
+    projectId: v.id("projects"),
     name: v.string(),
     sourceUrl: v.string(),
     thumbnailUrl: v.optional(v.string()),
@@ -96,9 +115,14 @@ export const save = mutation({
   },
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.userId !== user._id) {
+      throw new Error("Project not found or access denied");
+    }
     const now = Date.now();
-    return await ctx.db.insert("clips", {
+    const clipId = await ctx.db.insert("clips", {
       userId: user._id,
+      projectId: args.projectId,
       name: args.name,
       state: "RAW",
       sourceUrl: args.sourceUrl,
@@ -117,6 +141,8 @@ export const save = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    await ctx.db.patch(args.projectId, { updatedAt: now });
+    return clipId;
   },
 });
 
