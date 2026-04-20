@@ -4,6 +4,19 @@ Tracks the cloud-first rewrite. The old local FastAPI backend still lives in
 `corridorkey-studio-backend/` but is in "coming soon" status — CLOUD is now
 the default backend mode in the web app.
 
+## Now
+
+- **Shipped:** Slices 1 + 2 — auth, Convex shell, extract fal app, session
+  clip import + preview scrubbing
+- **In flight:** nothing — between slices
+- **Waiting on:** v2 mockup from the designer (right-panel locked to
+  ADR-01, left-panel + chrome mostly unchanged, new color
+  language to match a "real product")
+- **Next slice:** Slice 3 (keying pipeline) — can start in parallel with
+  the design work since it's mostly backend + API wiring
+
+Last updated: after commit `cf81b8d` (2026-04-20).
+
 ## Stack
 
 | Layer | Choice |
