@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import { route } from "@fal-ai/server-proxy/nextjs";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 
@@ -20,7 +21,7 @@ async function guard() {
   return null;
 }
 
-async function logRequest(request: Request, label: string) {
+async function logRequest(request: NextRequest, label: string) {
   const targetUrl = request.headers.get("x-fal-target-url");
   console.log(`[fal-proxy ${label}] target=${targetUrl ?? "(none)"}`);
   if (label === "POST" && targetUrl && !targetUrl.includes("/storage/upload")) {
@@ -36,21 +37,21 @@ async function logRequest(request: Request, label: string) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const err = await guard();
   if (err) return err;
   await logRequest(request, "GET");
   return route.GET(request);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const err = await guard();
   if (err) return err;
   await logRequest(request, "POST");
   return route.POST(request);
 }
 
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   const err = await guard();
   if (err) return err;
   await logRequest(request, "PUT");
