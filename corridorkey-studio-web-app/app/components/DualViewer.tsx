@@ -1,48 +1,59 @@
 "use client";
 
-import { useState } from "react";
-import { Columns2, Square } from "lucide-react";
-import { useClipStore } from "../stores/useClipStore";
-import { useSettingsStore } from "../stores/useSettingsStore";
-import { ViewMode } from "../lib/types";
-import { frameUrl } from "../lib/api";
-import { useBlobUrl } from "../lib/useBlobUrl";
+import { useState, useCallback, DragEvent } from "react";
+import { Columns2, Square, Upload } from "lucide-react";
+import { useSessionClipStore } from "../stores/useSessionClipStore";
+import { importClip } from "../lib/importClip";
 
-const OUTPUT_MODES = [ViewMode.ALPHA, ViewMode.FG, ViewMode.MATTE, ViewMode.COMP, ViewMode.PROCESSED];
-const ALL_MODES = [ViewMode.INPUT, ...OUTPUT_MODES];
-
-// Map ViewMode to the backend layer query param
-const LAYER_MAP: Record<string, string> = {
-  [ViewMode.INPUT]: "input",
-  [ViewMode.ALPHA]: "alpha_hint",
-  [ViewMode.FG]: "fg",
-  [ViewMode.MATTE]: "matte",
-  [ViewMode.COMP]: "comp",
-  [ViewMode.PROCESSED]: "processed",
-};
-
+/**
+ * DualViewer — left side shows the input preview frame (from fal CDN),
+ * right side is reserved for keyed outputs (slice 3+).
+ *
+ * The whole area is a drop zone. If no clip is loaded, drop onto it to
+ * import. While a clip is loading, drops are blocked.
+ */
 export default function DualViewer() {
-  const clips = useClipStore((s) => s.clips);
-  const selectedId = useClipStore((s) => s.selectedClipId);
-  const viewMode = useClipStore((s) => s.viewMode);
-  const setViewMode = useClipStore((s) => s.setViewMode);
-  const connected = useSettingsStore((s) => s.connectionStatus) === "connected";
-  const clip = clips.find((c) => c.id === selectedId);
+  const session = useSessionClipStore();
   const [split, setSplit] = useState(true);
+  const [draggingOver, setDraggingOver] = useState(false);
 
-  const modes = split ? OUTPUT_MODES : ALL_MODES;
+  const frameUrl =
+    session.meta?.previewFrameUrls?.[session.currentFrame] ?? null;
+
+  const onDragOver = useCallback((e: DragEvent) => {
+    if (e.dataTransfer.types.includes("Files")) {
+      e.preventDefault();
+      setDraggingOver(true);
+    }
+  }, []);
+
+  const onDragLeave = useCallback(() => {
+    setDraggingOver(false);
+  }, []);
+
+  const onDrop = useCallback(async (e: DragEvent) => {
+    e.preventDefault();
+    setDraggingOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) await importClip(file);
+  }, []);
+
+  const busy = session.stage === "uploading" || session.stage === "extracting";
 
   return (
-    <div className="flex flex-1 min-h-0">
-      {/* Input viewer — only in split mode */}
+    <div
+      className="flex flex-1 min-h-0 relative"
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={busy ? undefined : onDrop}
+    >
+      {/* Input side */}
       {split && (
         <div className="flex-1 flex flex-col border-r border-[var(--border)]">
           <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)] border-b border-[var(--border)] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span>INPUT</span>
-              {clip && (
-                <span>{clip.frameCount} frames</span>
-              )}
+              {session.meta && <span>{session.meta.frameCount} frames</span>}
             </div>
             <button
               onClick={() => setSplit(false)}
@@ -53,16 +64,12 @@ export default function DualViewer() {
             </button>
           </div>
           <div className="flex-1 flex items-center justify-center bg-[#0e0e0e]">
-            {clip ? (
-              <FrameView clipId={clip.id} frame={clip.currentFrame} layer="input" connected={connected} />
-            ) : (
-              <span className="text-[var(--text-muted)] text-[10px]">NO INPUT</span>
-            )}
+            <InputFrame frameUrl={frameUrl} />
           </div>
         </div>
       )}
 
-      {/* Output viewer */}
+      {/* Output side — empty until slice 3 wires keying */}
       <div className="flex-1 flex flex-col">
         <div className="border-b border-[var(--border)] flex items-center justify-between">
           <div className="flex items-center">
@@ -75,82 +82,93 @@ export default function DualViewer() {
                 <Columns2 size={12} />
               </button>
             )}
-            {modes.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={`px-3 py-1 text-[10px] uppercase tracking-wider font-bold cursor-pointer transition-colors border-r border-[var(--border)] ${
-                  viewMode === mode
-                    ? "bg-[var(--accent)] text-white"
-                    : "text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]"
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
+            <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+              OUTPUT
+            </div>
           </div>
-          {clip && (
+          {session.stage === "ready" && (
             <span className="px-3 text-[10px] uppercase tracking-wider text-[var(--success)]">
-              {clip.state}
+              RAW
             </span>
           )}
         </div>
         <div className="flex-1 flex items-center justify-center bg-[#0e0e0e]">
-          {clip ? (
-            <FrameView
-              clipId={clip.id}
-              frame={clip.currentFrame}
-              layer={LAYER_MAP[viewMode] || "input"}
-              connected={connected}
-            />
-          ) : (
-            <span className="text-[var(--text-muted)] text-[10px]">NO OUTPUT</span>
-          )}
+          <span className="text-[var(--text-muted)] text-[10px]">
+            {session.stage === "ready" ? "PRESS KEY TO RENDER" : "NO OUTPUT"}
+          </span>
         </div>
       </div>
+
+      {/* Drop overlay */}
+      {draggingOver && !busy && (
+        <div className="absolute inset-0 bg-[rgba(255,51,51,0.1)] border-2 border-dashed border-[var(--accent)] flex items-center justify-center pointer-events-none z-50">
+          <div className="flex flex-col items-center gap-2 text-[var(--accent)]">
+            <Upload size={32} />
+            <span className="text-xs uppercase tracking-[0.2em] font-bold">
+              DROP TO IMPORT
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function FrameView({
-  clipId,
-  frame,
-  layer,
-  connected,
-}: {
-  clipId: string;
-  frame: number;
-  layer: string;
-  connected: boolean;
-}) {
-  const url = connected ? frameUrl(clipId, frame, layer) : null;
-  const blobSrc = useBlobUrl(url);
+function InputFrame({ frameUrl }: { frameUrl: string | null }) {
+  const session = useSessionClipStore();
 
-  if (!connected) {
+  if (session.stage === "idle") {
     return (
       <div className="text-[var(--text-muted)] text-xs text-center">
-        <div className="w-64 h-44 border border-[var(--border)] flex items-center justify-center mb-2 bg-[#1a1a1a]">
-          <span className="text-[10px]">SERVER OFFLINE</span>
+        <div className="w-64 h-44 border-2 border-dashed border-[var(--border)] flex flex-col items-center justify-center gap-2 bg-[#1a1a1a]">
+          <Upload size={24} className="opacity-40" />
+          <span className="text-[10px] uppercase tracking-[0.15em]">
+            DROP VIDEO FILE
+          </span>
         </div>
       </div>
     );
   }
 
-  if (!blobSrc) {
+  if (session.stage === "error") {
     return (
-      <div className="text-[var(--text-muted)] text-xs text-center">
-        <div className="w-64 h-44 border border-[var(--border)] flex items-center justify-center mb-2 bg-[#1a1a1a]">
-          <span className="text-[10px]">{layer.toUpperCase()} — FRAME {frame}</span>
-        </div>
+      <div className="text-[var(--error)] text-[10px] max-w-sm text-center px-4">
+        {session.errorMessage}
       </div>
     );
   }
 
+  if (session.stage === "uploading") {
+    return (
+      <div className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider">
+        UPLOADING TO FAL CDN…
+      </div>
+    );
+  }
+
+  if (session.stage === "extracting") {
+    return (
+      <div className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider">
+        EXTRACTING PREVIEW FRAMES…
+      </div>
+    );
+  }
+
+  if (!frameUrl) {
+    return (
+      <span className="text-[var(--text-muted)] text-[10px]">
+        NO FRAME
+      </span>
+    );
+  }
+
+  // React will re-fetch when src changes, and fal CDN serves with CORS
+  // headers, so <img> just works.
   return (
     <img
-      key={`${clipId}-${layer}-${frame}`}
-      src={blobSrc}
-      alt={`${layer} frame ${frame}`}
+      // eslint-disable-next-line @next/next/no-img-element
+      src={frameUrl}
+      alt={`frame ${session.currentFrame}`}
       className="max-w-full max-h-full object-contain"
     />
   );
