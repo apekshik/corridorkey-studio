@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { useMutation } from "convex/react";
+import { useRouter } from "next/navigation";
+import { useMutation, useQuery } from "convex/react";
 import TopBar from "./components/TopBar";
 import StatusBar from "./components/StatusBar";
 import DualViewer from "./components/DualViewer";
@@ -14,8 +15,10 @@ import { useSettingsStore } from "./stores/useSettingsStore";
 import { useServerHealth } from "./lib/useServerHealth";
 import { useJobEvents } from "./lib/useJobEvents";
 import { api } from "../convex/_generated/api";
+import { Id } from "../convex/_generated/dataModel";
 
 interface StudioShellProps {
+  projectId: Id<"projects">;
   workosUser: {
     email: string;
     name?: string;
@@ -23,11 +26,13 @@ interface StudioShellProps {
   };
 }
 
-export default function StudioShell({ workosUser }: StudioShellProps) {
+export default function StudioShell({ projectId, workosUser }: StudioShellProps) {
+  const router = useRouter();
   const toggleQueue = useQueueStore((s) => s.toggleQueue);
   const toggleSettings = useSettingsStore((s) => s.toggleSettingsPanel);
   const settingsOpen = useSettingsStore((s) => s.settingsPanelOpen);
   const getOrCreate = useMutation(api.users.getOrCreate);
+  const project = useQuery(api.projects.get, { projectId });
 
   // Mirror the WorkOS identity into Convex on first render.
   useEffect(() => {
@@ -39,6 +44,15 @@ export default function StudioShell({ workosUser }: StudioShellProps) {
       console.error("[user sync] failed:", err);
     });
   }, [getOrCreate, workosUser.email, workosUser.name, workosUser.profileImageUrl]);
+
+  // A project URL that doesn't resolve (stale bookmark, foreign user,
+  // deleted project) sends the user back to the root. Root redirects to
+  // the current user's default project.
+  useEffect(() => {
+    if (project === null) {
+      router.replace("/");
+    }
+  }, [project, router]);
 
   // LOCAL-mode effects — become no-ops in CLOUD mode
   useServerHealth();

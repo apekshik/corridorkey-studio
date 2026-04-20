@@ -96,8 +96,10 @@ work in this slice.
   kept temporarily to ease migration
 - Auto-created "Untitled" project per user on first sign-in
 - `projects.rename` + `projects.create` mutations; no delete in v1
-- `/projects` list + `/projects/:id` studio page; `/` redirects to the
-  default project
+- `/projects/:id` studio page; `/` redirects to the default project on
+  sign-in. No standalone `/projects` list page in v1 — the TopBar
+  dropdown is the canonical way to switch projects. A "Manage all" page
+  is slice 5+
 - Project switcher in TopBar: serif-italic name + caret → dropdown with
   search + recent projects + `New Project` action. Full CRUD (delete,
   cover picker, manage-all page) is slice 5+
