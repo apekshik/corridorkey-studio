@@ -8,14 +8,15 @@ the default backend mode in the web app.
 
 - **Shipped:** Slices 1 + 2 — auth, Convex shell, extract fal app, session
   clip import + preview scrubbing
-- **In flight:** nothing — between slices
-- **Waiting on:** v2 mockup from the designer (right-panel locked to
-  ADR-01, left-panel + chrome mostly unchanged, new color
-  language to match a "real product")
-- **Next slice:** Slice 3 (keying pipeline) — can start in parallel with
-  the design work since it's mostly backend + API wiring
+- **In flight:** Slice 3 on branch `slice-3-design-projects` — v2 design
+  pass + projects shell, started once the v2 prototype HTML landed at
+  `DESIGN_MOCK.html`
+- **Waiting on:** nothing
+- **Next slice:** Slice 4 (keying pipeline) — the cloud fal app +
+  webhook-driven frame writes. Rolled to slice 4 because projects must
+  exist before frames can be attached to anything stable
 
-Last updated: after commit `cf81b8d` (2026-04-20).
+Last updated: 2026-04-20, start of slice 3.
 
 ## Stack
 
@@ -75,52 +76,111 @@ Shipped: commit `7f1b6f0`
 - fal apps bind to **one** machine type per app → extract (CPU) and key
   (GPU) must be separate apps
 
-### Slice 3 — Keying pipeline ⏳ (next up)
+### Slice 3 — v2 design + projects shell ⏳ (in flight)
 
-Goal: the KEY button runs the full pipeline (GVM auto-hints → CorridorKey →
-all outputs).
+Goal: reskin the app to the v2 prototype (`DESIGN_MOCK.html`) and stand up
+the projects model so slice 4 has somewhere to attach frames. No keying
+work in this slice.
+
+**Design system**
+- Token system from the prototype: `--bg-0..4`, `--ink-0..4`, `--rule`,
+  accent (configurable), `--serif` = Instrument Serif, `--mono` =
+  JetBrains Mono
+- `data-density | data-accent | data-chrome` attribute selectors on
+  `<html>`, driven by a persisted Zustand `useTweaksStore`
+- Shipped defaults: `accent=green, chrome=hair, density=compact, pending=off`
+- Floating **Tweaks** panel launched from the status bar (density / accent
+  / chrome / viewer layout / pending overlay)
+
+**Projects (stub-level CRUD, wired up but minimal)**
+- `projects` table: `{ userId, name, createdAt, updatedAt, coverClipId? }`
+  — `coverClipId` reserved, no picker UI in v1
+- `clips.projectId` replaces `clips.userId` as parent; `clips.userId`
+  kept temporarily to ease migration
+- Auto-created "Untitled" project per user on first sign-in
+- `projects.rename` + `projects.create` mutations; no delete in v1
+- `/projects` list + `/projects/:id` studio page; `/` redirects to the
+  default project
+- Project switcher in TopBar: serif-italic name + caret → dropdown with
+  search + recent projects + `New Project` action. Full CRUD (delete,
+  cover picker, manage-all page) is slice 5+
+
+**Chrome rewrites** (pixel-match the prototype)
+- TopBar: brand mark + serif wordmark, project switcher, meta strip
+  (clip count · total time · saved/unsaved), KEYED-FRAMES chip
+  (repurposed from HINTS — see ADR-07), STOP, KEY split-button, icon
+  buttons, user chip
+- SidePanel: Media / Queue tabs, state color bars, TC overlay,
+  warning dot, upload/extract progress row, bottom dropzone (cloud
+  imports tagged SOON)
+- DualViewer: A│B / A─B / SINGLE / HINT PAINTER (SOON); layer tabs
+  Alpha / FG / Matte / Comp / Processed with mini swatches + keys 1–5;
+  stream-overlay pending tile; viewer tools (fit / 100% / ruler /
+  checker)
+- FrameScrubber: transport, processed-region tint, keyed-frame coverage
+  ticks, yellow keying-edge marker, playhead caret
+- ParameterPanel: groups Alpha Hint (coverage widget + Generate
+  Remaining) → Color Space → Refine → Despill → Output. Matches
+  ADR-01 exactly
+- StatusBar: Cloud (stub `CLOUD`, no region), Queue, Stream pulse,
+  Session cost (stubbed 0 until slice 5), Surge chip, keyboard
+  shortcut strip, Backend chip, TWEAKS button
+
+**State changes**
+- Clip state enum adds `UPLOADING` (pre-extract) and `KEYING` (between
+  READY and COMPLETE). `NEEDS_TRANSCODE` stays on the `warnings` array
+- Any param / settings change marks the project dirty; Save button +
+  ⌘S flushes to Convex and stamps "saved HH:MM" in the meta strip
+
+**Deferred to later slices (already tagged SOON in the prototype)**
+- Hint Painter modal + VideoMaMa propagation (slice 5+)
+- S3 / GCS / Dropbox / Frame.io imports (post-v1)
+- Real surge / spot pricing indicator, real region/GPU badge (post-v1)
+- Project delete, cover picker, `/projects` "Manage all" page (slice 5+)
+- Slate EXIF overlay (ROLL / SCENE / CAM / COLOR / LENS) — slice 6 polish
+
+### Slice 4 — Keying pipeline ⏳
+
+Goal: the KEY button runs the full pipeline (GVM auto-hints → CorridorKey
+→ all outputs), webhook-driven end to end.
 
 - New fal app: `corridorkey-studio-key` (H100, loads GVM + CorridorKey at
   warmup — ~14–22 GB VRAM, fits easily)
-- Three endpoints:
+- Three endpoints, all dispatched via `fal.queue.submit` with
+  `webhook_url`, **no** `fal.subscribe`:
   - `POST /alpha` — GVM only → alpha hint URLs
-  - `POST /key` — CorridorKey only, takes alpha hints → matte / fg / comp / processed URLs
-  - `POST /pipeline` — combined, returns all of the above in one call
-- Convex webhook receiver (`httpAction`) for fal job completion, updates
-  `frames` table
-- Frontend: wire KEY button, reactive `frames` query, progress in status bar
-- `DualViewer` output side renders matte / fg / comp / processed
-- Timeline coverage bar populates green as frames complete
-- Parameter panel wired to the locked MVP spec (ADR-01)
+  - `POST /key` — CorridorKey only, takes alpha hints → matte / fg /
+    comp / processed URLs
+  - `POST /pipeline` — chains both; also emits an alpha-done webhook
+    mid-run so the UI can stream hints before mattes
+- Convex `httpAction` receivers at `/fal-webhook/alpha` + `/fal-webhook/key`,
+  signature-verified, bulk-insert `frames` rows
+- Convex `key.submit` action — the only place that holds `FAL_KEY`,
+  called from the client via mutation-style invocation
+- Frontend: reactive `frames.listByClip` feeds DualViewer layer outputs,
+  FrameScrubber processed tint, TopBar KEYED-FRAMES chip
+- STOP calls `fal.queue.cancel`
+- Parameter panel already wired from slice 3 — here we just ship the
+  payload to fal
 
-### Slice 4 — Projects + Save ⏳
+### Slice 5 — Hint Painter + Usage / cost tracking ⏳
 
-Projects as first-class, flat hierarchy (no scenes/shots nesting).
-
-- `projects` table: `{ userId, name, description?, createdAt, updatedAt, coverClipId? }`
-- `clips.projectId` replaces `clips.userId` as parent
-- `/projects` list page + `/projects/:id` studio page
-- Default "Untitled" project auto-created on first sign-in
-- Session clip lives in the current project; explicit save writes to that
-  project's clips list
-- Header project switcher (click project name → dropdown + "New Project")
-- `beforeunload` warning for unsaved keyed output
-
-### Slice 5 — Usage / cost tracking ⏳
-
+- Hint Painter modal wired to a VideoMaMa fal app (propagation, keyframes)
 - `usage` table: GPU-min per user per day
 - Rate-limit actions that dispatch jobs
-- Status bar: `SESSION $0.45 · 2.1 GPU-min · CLOUD EU-W4 · A100` (from
-  fal's `x-fal-billable-units` response header)
+- Status bar: real `CLOUD EU-W4 · A100` + `SESSION $0.45 · 2.1 GPU-min`
+  (from fal's `x-fal-billable-units` response header)
+- Project CRUD polish: delete, cover picker, `/projects` "Manage all"
+  page
 - Display remaining free-tier quota
 
 ### Slice 6 — Polish aligned with v2 design ⏳
 
-- Metadata overlay card (`ROLL / SCENE / CAM / LENS` from ffprobe + user)
+- Slate EXIF overlay (`ROLL / SCENE / CAM / COLOR / LENS` from ffprobe +
+  user-entered sidecar)
 - Codec details in clip rows
-- Keyboard shortcut strip in status bar
-- KEY `SCOPE` dropdown (ALL-READY / selection / single)
-- Resumable uploads for multi-GB ProRes (chunked multipart, maybe)
+- Resumable uploads for multi-GB ProRes (chunked multipart)
+- Cloud import integrations (S3 / GCS / Dropbox / Frame.io)
 
 ## Architecture Decision Records
 
@@ -192,6 +252,26 @@ No client-supplied `userId` arguments to mutations. Every mutation calls
 and resolves to the `users` row. Protects against a client forging a
 different user's id to trigger billable jobs.
 
+### ADR-07: KEYED-FRAMES chip replaces HINTS chip for v1
+
+The v2 prototype shows a `HINTS 42 / 120` chip in the TopBar that assumes
+VideoMaMa manual paint is shipped. Since Hint Painter is deferred to
+slice 5, the chip is repurposed to show **keyed-frame coverage** on the
+currently-selected clip: `KEYED N / M`. Once frames have been
+processed by the key fal app, `N` increments; at N=M the chip turns
+green. When Hint Painter ships, a separate HINTS chip or a toggle can
+be reintroduced.
+
+### ADR-08: Keying pipeline — webhook only, no `fal.subscribe`
+
+All keying jobs are dispatched with `fal.queue.submit({ webhook_url })`
+pointing at Convex `httpAction` receivers. The client never blocks on
+fal or polls status. This matches DESIGN_CONCEPT §5.3 (live streaming
+results): the UI subscribes reactively to the `frames` table, and the
+webhook is the only writer. Separate `/alpha` and `/key` endpoints
+exist (on top of the combined `/pipeline`) so that a failure is
+attributable to one stage.
+
 ## File layout
 
 ```
@@ -212,6 +292,7 @@ corridorkey-studio/
     extract_app.py                 preview extraction endpoint
   corridorkey-studio-backend/    old local FastAPI backend (frozen)
   DESIGN_CONCEPT.md              design-brief for the v2 mock
+  DESIGN_MOCK.html               v2 prototype (pixel-match reference)
   PROGRESS.md                    this file
 ```
 
