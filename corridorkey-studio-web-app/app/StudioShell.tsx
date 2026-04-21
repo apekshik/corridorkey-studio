@@ -9,7 +9,6 @@ import DualViewer from "./components/DualViewer";
 import FrameScrubber from "./components/FrameScrubber";
 import ParameterPanel from "./components/ParameterPanel";
 import SidePanel from "./components/SidePanel";
-import SplashScreen from "./components/SplashScreen";
 import { useQueueStore } from "./stores/useQueueStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
 import { useServerHealth } from "./lib/useServerHealth";
@@ -71,6 +70,12 @@ export default function StudioShell({ projectId, workosUser }: StudioShellProps)
         save();
         return;
       }
+      // ⌘O / Ctrl-O — back to the projects pane
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        router.push("/");
+        return;
+      }
       if (e.metaKey || e.ctrlKey) return;
 
       switch (e.key) {
@@ -84,11 +89,10 @@ export default function StudioShell({ projectId, workosUser }: StudioShellProps)
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleQueue, toggleSettings, save]);
+  }, [toggleQueue, toggleSettings, save, router]);
 
   return (
     <div className="h-full flex flex-col">
-      <SplashScreen />
       <TopBar projectId={projectId} project={project} onSave={save} />
       <div className="flex flex-1 min-h-0">
         <SidePanel projectId={projectId} />

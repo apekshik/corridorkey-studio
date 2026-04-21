@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "convex/react";
 import { ChevronDown, Download, Settings } from "lucide-react";
-import ProjectSwitcher from "./ProjectSwitcher";
 import UserMenu from "./UserMenu";
 import { useDirtyStore } from "../stores/useDirtyStore";
 import { api } from "../../convex/_generated/api";
@@ -83,21 +83,21 @@ export default function TopBar({ projectId, project, onSave }: Props) {
         style={{ padding: "0 var(--pad)" }}
       >
         <div className="flex items-center gap-3.5 pr-3 border-r border-[var(--rule)] h-[60%] min-w-0">
-          {project ? (
-            <ProjectSwitcher projectId={projectId} currentName={project.name} />
-          ) : (
-            <div className="flex flex-col gap-[3px] leading-none">
-              <span className="text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-3)]">
-                Project /
-              </span>
-              <span
-                className="text-[20px] italic text-[var(--ink-3)] leading-none"
-                style={{ fontFamily: "var(--serif)" }}
-              >
-                …
-              </span>
-            </div>
-          )}
+          <Link
+            href="/"
+            title="Back to projects (⌘O)"
+            className="flex flex-col gap-[3px] leading-none min-w-0"
+          >
+            <span className="text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-2)] whitespace-nowrap">
+              Project <span className="text-[var(--ink-3)] tracking-normal">/</span>
+            </span>
+            <span
+              className="text-[20px] italic leading-none truncate max-w-[260px] text-[var(--ink-0)] hover:text-[var(--accent)] transition-colors"
+              style={{ fontFamily: "var(--serif)" }}
+            >
+              {project?.name ?? "…"}
+            </span>
+          </Link>
           <div className="text-[11px] text-[var(--ink-2)] whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-2">
             <span className="tabular-nums">
               {String(clipCount).padStart(2, "0")} clips

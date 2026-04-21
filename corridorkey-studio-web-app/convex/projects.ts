@@ -64,31 +64,6 @@ export const get = query({
 // Mutations
 // ---------------------------------------------------------------------------
 
-/**
- * Idempotent — returns the newest project if any exists, otherwise
- * creates an "Untitled" one. Called after sign-in by the StudioShell.
- */
-export const getOrCreateDefault = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const user = await requireUser(ctx);
-    const existing = await ctx.db
-      .query("projects")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .order("desc")
-      .first();
-    if (existing) return existing._id;
-
-    const now = Date.now();
-    return await ctx.db.insert("projects", {
-      userId: user._id,
-      name: "Untitled",
-      createdAt: now,
-      updatedAt: now,
-    });
-  },
-});
-
 export const create = mutation({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {
@@ -118,6 +93,43 @@ export const rename = mutation({
       name: trimmed,
       updatedAt: Date.now(),
     });
+  },
+});
+
+/**
+ * Cascade-delete a project: every clip in the project, every frame of
+ * every clip, and finally the project row itself. v1 scale is small
+ * (single user, a handful of projects, few hundred frames each) so we
+ * can collect() and delete() inline — no pagination needed.
+ *
+ * Ownership is verified via requireUser; a foreign projectId throws.
+ */
+export const remove = mutation({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, { projectId }) => {
+    const user = await requireUser(ctx);
+    const project = await ctx.db.get(projectId);
+    if (!project || project.userId !== user._id) {
+      throw new Error("Project not found or access denied");
+    }
+
+    const clips = await ctx.db
+      .query("clips")
+      .withIndex("by_project", (q) => q.eq("projectId", projectId))
+      .collect();
+
+    for (const clip of clips) {
+      const frames = await ctx.db
+        .query("frames")
+        .withIndex("by_clip", (q) => q.eq("clipId", clip._id))
+        .collect();
+      for (const frame of frames) {
+        await ctx.db.delete(frame._id);
+      }
+      await ctx.db.delete(clip._id);
+    }
+
+    await ctx.db.delete(projectId);
   },
 });
 
