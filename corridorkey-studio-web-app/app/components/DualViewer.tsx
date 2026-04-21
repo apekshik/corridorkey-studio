@@ -247,66 +247,61 @@ function InputPane({
   frameUrl: string | null;
   session: ReturnType<typeof useSessionClipStore.getState>;
 }) {
+  const hasFrame = session.stage === "ready" && frameUrl;
+
   return (
     <div className="relative overflow-hidden border-r border-[var(--rule-strong)]">
-      <div className="absolute inset-0 flex items-center justify-center">
-        <InputFrame frameUrl={frameUrl} session={session} />
-      </div>
+      {/* Plate is the idle background — preview image layers on top once ready. */}
+      <Plate />
+      {hasFrame ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#050506]">
+          <img
+            // eslint-disable-next-line @next/next/no-img-element
+            src={frameUrl!}
+            alt={`frame ${session.currentFrame}`}
+            className="max-w-full max-h-full object-contain"
+          />
+        </div>
+      ) : (
+        <InputSlate session={session} />
+      )}
       <PaneLabel tag="A" label="INPUT · sRGB" />
     </div>
   );
 }
 
-function InputFrame({
-  frameUrl,
+function InputSlate({
   session,
 }: {
-  frameUrl: string | null;
   session: ReturnType<typeof useSessionClipStore.getState>;
 }) {
-  if (session.stage === "idle") {
-    return (
-      <div className="text-[var(--ink-3)] text-[10px] uppercase tracking-[0.2em] flex flex-col items-center gap-2">
-        <div className="w-64 h-44 border-2 border-dashed border-[var(--rule)] flex flex-col items-center justify-center gap-2 bg-[var(--bg-1)]">
-          <Upload size={24} className="opacity-40" />
-          <span className="text-[10px] tracking-[0.15em]">DROP VIDEO FILE</span>
-        </div>
-      </div>
-    );
-  }
-  if (session.stage === "error") {
-    return (
-      <div className="text-[var(--err)] text-[10px] max-w-sm text-center px-4">
-        {session.errorMessage}
-      </div>
-    );
-  }
+  let title = "Drop a plate";
+  let sub = "Video file · any codec ffmpeg supports";
+  let tone: "default" | "warn" | "err" = "default";
   if (session.stage === "uploading") {
-    return (
-      <div className="text-[var(--ink-2)] text-[10px] uppercase tracking-[0.2em]">
-        UPLOADING TO FAL CDN…
-      </div>
-    );
+    title = "Uploading";
+    sub = "Streaming source to fal CDN…";
+    tone = "warn";
+  } else if (session.stage === "extracting") {
+    title = "Extracting";
+    sub = "Decoding frames on the extract app…";
+    tone = "warn";
+  } else if (session.stage === "error") {
+    title = "Import failed";
+    sub = session.errorMessage ?? "Unknown error";
+    tone = "err";
   }
-  if (session.stage === "extracting") {
-    return (
-      <div className="text-[var(--ink-2)] text-[10px] uppercase tracking-[0.2em]">
-        EXTRACTING PREVIEW FRAMES…
-      </div>
-    );
-  }
-  if (!frameUrl) {
-    return (
-      <span className="text-[var(--ink-3)] text-[10px]">NO FRAME</span>
-    );
-  }
+
   return (
-    <img
-      // eslint-disable-next-line @next/next/no-img-element
-      src={frameUrl}
-      alt={`frame ${session.currentFrame}`}
-      className="max-w-full max-h-full object-contain"
-    />
+    <Slate>
+      <SlateTitle tone={tone}>{title}</SlateTitle>
+      <SlateRow k="Status">
+        {session.stage === "idle" ? "READY" : session.stage.toUpperCase()}
+      </SlateRow>
+      <SlateRow k="Hint">{sub}</SlateRow>
+      <SlateRow k="Source">—</SlateRow>
+      <SlateRow k="Codec">—</SlateRow>
+    </Slate>
   );
 }
 
@@ -323,6 +318,8 @@ function OutputPane({
 }) {
   return (
     <div className="relative overflow-hidden bg-[#0a0a0a]">
+      <Plate />
+
       {/* Checker background for FG / COMP */}
       {checker && (
         <div
@@ -346,21 +343,117 @@ function OutputPane({
         />
       )}
 
-      <div className="absolute inset-0 grid place-items-center px-10 text-center">
-        {stage === "ready" ? (
-          <div className="text-[var(--ink-3)] text-[10px] uppercase tracking-[0.22em]">
-            {layer.toUpperCase()} PENDING ·{" "}
-            <span className="text-[var(--ink-2)]">slice 4 wires keying</span>
-          </div>
-        ) : (
-          <div className="text-[var(--ink-3)] text-[10px] uppercase tracking-[0.22em]">
-            No output
-          </div>
-        )}
-      </div>
+      <Slate>
+        <SlateTitle>
+          {stage === "ready" ? `${layer.toUpperCase()} pending` : "No output"}
+        </SlateTitle>
+        <SlateRow k="Layer">{outputLayerLabel(layer)}</SlateRow>
+        <SlateRow k="Status">
+          {stage === "ready" ? "AWAITING KEY" : "NO CLIP"}
+        </SlateRow>
+        <SlateRow k="Pipeline">slice 4 · fal webhook</SlateRow>
+      </Slate>
 
       <PaneLabel tag="B" label={outputLayerLabel(layer)} />
     </div>
+  );
+}
+
+/* ----------------------------- plate + slate ---------------------------- */
+
+/** SMPTE color bars + PLUGE — the idle pane background. */
+function Plate() {
+  const topBars = ["#c0c0c0", "#c0c000", "#00c0c0", "#00c000", "#c000c0", "#c00000", "#0000c0"];
+  const midBars = ["#0000c0", "#131313", "#c000c0", "#131313", "#00c0c0", "#131313", "#c0c0c0"];
+  const botBars = [
+    { bg: "#00214c", flex: 5 },
+    { bg: "#ffffff", flex: 5 },
+    { bg: "#32006a", flex: 5 },
+    { bg: "#131313", flex: 5 },
+    { bg: "#090909", flex: 1 },
+    { bg: "#131313", flex: 1 },
+    { bg: "#1d1d1d", flex: 1 },
+    { bg: "#131313", flex: 2 },
+    { bg: "#131313", flex: 2 },
+    { bg: "#131313", flex: 2 },
+  ];
+  return (
+    <div
+      className="absolute inset-0 grid pointer-events-none"
+      style={{ gridTemplateRows: "4fr 0.55fr 0.7fr" }}
+      aria-hidden
+    >
+      <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
+        {topBars.map((bg, i) => (
+          <span key={i} style={{ background: bg }} />
+        ))}
+      </div>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
+        {midBars.map((bg, i) => (
+          <span key={i} style={{ background: bg }} />
+        ))}
+      </div>
+      <div
+        className="grid"
+        style={{
+          gridTemplateColumns: botBars.map((b) => `${b.flex}fr`).join(" "),
+        }}
+      >
+        {botBars.map((b, i) => (
+          <span key={i} style={{ background: b.bg }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Slate({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="absolute inset-0 grid place-items-center pointer-events-none z-[3]">
+      <div
+        className="grid gap-y-1.5 gap-x-[18px] px-[18px] py-3.5 min-w-[280px] font-[var(--mono)] text-[11px] uppercase tracking-[0.12em]"
+        style={{
+          background: "rgba(11,12,14,0.72)",
+          border: "1px solid rgba(255,255,255,0.22)",
+          color: "var(--ink-0)",
+          gridTemplateColumns: "auto auto",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function SlateTitle({
+  children,
+  tone = "default",
+}: {
+  children: React.ReactNode;
+  tone?: "default" | "warn" | "err";
+}) {
+  const color =
+    tone === "warn"
+      ? "var(--warn)"
+      : tone === "err"
+      ? "var(--err)"
+      : "var(--ink-0)";
+  return (
+    <div
+      className="col-span-full text-[24px] italic leading-[1] tracking-[0] normal-case mb-1.5"
+      style={{ fontFamily: "var(--serif)", color }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SlateRow({ k, children }: { k: string; children: React.ReactNode }) {
+  return (
+    <>
+      <span style={{ color: "rgba(242,239,232,0.6)" }}>{k}</span>
+      <span>{children}</span>
+    </>
   );
 }
 
