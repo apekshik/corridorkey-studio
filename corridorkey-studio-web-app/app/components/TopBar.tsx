@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useQuery } from "convex/react";
 import { ChevronDown, Download, Settings } from "lucide-react";
 import UserMenu from "./UserMenu";
@@ -13,6 +12,7 @@ interface Props {
   projectId: Id<"projects">;
   project: Doc<"projects"> | null | undefined;
   onSave: () => void;
+  onOpenPane: () => void;
 }
 
 type KeyScope = "selected" | "ready" | "all";
@@ -22,7 +22,7 @@ const SCOPES: { id: KeyScope; label: string; sub: string }[] = [
   { id: "all", label: "Key Everything", sub: "Auto-generate hints for clips that need them" },
 ];
 
-export default function TopBar({ projectId, project, onSave }: Props) {
+export default function TopBar({ projectId, project, onSave, onOpenPane }: Props) {
   const clips = useQuery(api.clips.listByProject, { projectId }) ?? [];
   const [keyScope, setKeyScope] = useState<KeyScope>("ready");
   const [scopeOpen, setScopeOpen] = useState(false);
@@ -83,10 +83,10 @@ export default function TopBar({ projectId, project, onSave }: Props) {
         style={{ padding: "0 var(--pad)" }}
       >
         <div className="flex items-center gap-3.5 pr-3 border-r border-[var(--rule)] h-[60%] min-w-0">
-          <Link
-            href="/"
-            title="Back to projects (⌘O)"
-            className="flex flex-col gap-[3px] leading-none min-w-0"
+          <button
+            onClick={onOpenPane}
+            title="Open projects pane (⌘O)"
+            className="flex flex-col gap-[3px] leading-none min-w-0 text-left"
           >
             <span className="text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-2)] whitespace-nowrap">
               Project <span className="text-[var(--ink-3)] tracking-normal">/</span>
@@ -97,7 +97,7 @@ export default function TopBar({ projectId, project, onSave }: Props) {
             >
               {project?.name ?? "…"}
             </span>
-          </Link>
+          </button>
           <div className="text-[11px] text-[var(--ink-2)] whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-2">
             <span className="tabular-nums">
               {String(clipCount).padStart(2, "0")} clips

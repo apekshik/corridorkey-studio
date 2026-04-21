@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import TopBar from "./components/TopBar";
@@ -8,6 +8,7 @@ import StatusBar from "./components/StatusBar";
 import DualViewer from "./components/DualViewer";
 import FrameScrubber from "./components/FrameScrubber";
 import ParameterPanel from "./components/ParameterPanel";
+import ProjectsPane from "./components/ProjectsPane";
 import SidePanel from "./components/SidePanel";
 import { useQueueStore } from "./stores/useQueueStore";
 import { useSettingsStore } from "./stores/useSettingsStore";
@@ -34,6 +35,7 @@ export default function StudioShell({ projectId, workosUser }: StudioShellProps)
   const getOrCreate = useMutation(api.users.getOrCreate);
   const project = useQuery(api.projects.get, { projectId });
   const { save } = useProjectSettings(projectId, project);
+  const [paneOpen, setPaneOpen] = useState(false);
 
   // Mirror the WorkOS identity into Convex on first render.
   useEffect(() => {
@@ -70,10 +72,10 @@ export default function StudioShell({ projectId, workosUser }: StudioShellProps)
         save();
         return;
       }
-      // ⌘O / Ctrl-O — back to the projects pane
+      // ⌘O / Ctrl-O — open the projects pane over the studio
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "o") {
         e.preventDefault();
-        router.push("/");
+        setPaneOpen(true);
         return;
       }
       if (e.metaKey || e.ctrlKey) return;
@@ -93,7 +95,12 @@ export default function StudioShell({ projectId, workosUser }: StudioShellProps)
 
   return (
     <div className="h-full flex flex-col">
-      <TopBar projectId={projectId} project={project} onSave={save} />
+      <TopBar
+        projectId={projectId}
+        project={project}
+        onSave={save}
+        onOpenPane={() => setPaneOpen(true)}
+      />
       <div className="flex flex-1 min-h-0">
         <SidePanel projectId={projectId} />
         <div className="flex flex-col flex-1 min-w-0">
@@ -103,6 +110,13 @@ export default function StudioShell({ projectId, workosUser }: StudioShellProps)
         {settingsOpen && <ParameterPanel />}
       </div>
       <StatusBar />
+
+      {paneOpen && (
+        <ProjectsPane
+          workosUser={workosUser}
+          onClose={() => setPaneOpen(false)}
+        />
+      )}
     </div>
   );
 }
