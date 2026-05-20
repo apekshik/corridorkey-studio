@@ -37,6 +37,11 @@ results flow back via fal webhook to Convex `/fal-webhook/{alpha,key}`.
 - `POST /pipeline` — chains both; emits an interim alpha-done webhook so the
   UI can stream hints before mattes land
 
+Runs on `GPU-A100` with the real GreenFormer (CorridorKey) and GVM engines.
+The CorridorKey repo is cloned at image build time, pinned to an explicit
+commit SHA (`_CORRIDORKEY_SHA` in `keying_app.py`). Model weights live on
+fal's persistent `/data` volume so cold starts after the first one are fast.
+
 **Deploy**
 
 ```bash
@@ -59,11 +64,17 @@ npx convex env set FAL_WEBHOOK_SECRET "$(openssl rand -hex 32)" --prod
 fal secrets set FAL_WEBHOOK_SECRET=<the same value>
 ```
 
-**Stub mode** — until the CorridorKey + GVM repos are bundled into the
-container, the app falls back to green-threshold mattes. This is enough
-to validate the webhook plumbing end-to-end. See the `_dockerfile`
-comments in `keying_app.py` for how to enable real inference (and bump
-`machine_type` to `GPU-H100`).
+> **First cold start is slow.** The very first invocation pulls
+> `geyongtao/gvm` (~80 GB) and `nikopueringer/CorridorKey_v1.0` (~400 MB)
+> from HuggingFace into `/data/weights/`. Expect ~10–20 minutes. Every
+> subsequent cold start re-uses the cached weights and only pays the
+> torch/model-load cost (~30–60 s). Use a longer `keep_alive` while
+> testing actively to avoid burning a cold start per request.
+
+**Bumping the CorridorKey revision**
+
+Edit `_CORRIDORKEY_SHA` in `keying_app.py` to the new commit hash and
+redeploy — fal will rebuild the image (the git clone layer invalidates).
 
 ## Why ffmpeg via apt instead of OpenCV's bundled build
 

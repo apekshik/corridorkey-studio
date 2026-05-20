@@ -6,14 +6,15 @@ the default backend mode in the web app.
 
 ## Now
 
-- **Shipped:** Slices 1 + 2 + 3 — auth, Convex shell, extract fal app,
-  session clip import + preview scrubbing, v2 design pass + projects shell
-- **In flight:** Slice 4 on branch `slice-4-keying-pipeline` — cloud keying
-  fal app + Convex action dispatch + webhook-driven frame writes
+- **Shipped:** Slices 1 + 2 + 3 + 4 — auth, Convex shell, extract fal app,
+  session clip import + preview scrubbing, v2 design + projects shell,
+  keying pipeline end-to-end (stub mode)
+- **In flight:** Slice 4.5 — swap stub keying for real CorridorKey + GVM
+  inference on GPU-A100
 - **Waiting on:** nothing
 - **Next slice:** Slice 5 (Hint Painter modal + VideoMaMa + usage tracking)
 
-Last updated: 2026-05-17, start of slice 4.
+Last updated: 2026-05-19, end of slice 4 / start of 4.5.
 
 ## Stack
 
@@ -135,29 +136,54 @@ work in this slice.
 - Project delete, cover picker, `/projects` "Manage all" page (slice 5+)
 - Slate EXIF overlay (ROLL / SCENE / CAM / COLOR / LENS) — slice 6 polish
 
-### Slice 4 — Keying pipeline ⏳
+### Slice 4 — Keying pipeline ✅
 
 Goal: the KEY button runs the full pipeline (GVM auto-hints → CorridorKey
 → all outputs), webhook-driven end to end.
 
-- New fal app: `corridorkey-studio-key` (H100, loads GVM + CorridorKey at
-  warmup — ~14–22 GB VRAM, fits easily)
+Shipped: commit `cf7b980`. Stub mode (green-threshold) for the inference
+side — real models land in Slice 4.5.
+
+- New fal app: `apek/corridorkey-studio-key` (M tier, CPU, stub-mode
+  green-threshold mattes; bumps to GPU-A100 in 4.5)
 - Three endpoints, all dispatched via `fal.queue.submit` with
   `webhook_url`, **no** `fal.subscribe`:
-  - `POST /alpha` — GVM only → alpha hint URLs
-  - `POST /key` — CorridorKey only, takes alpha hints → matte / fg /
-    comp / processed URLs
-  - `POST /pipeline` — chains both; also emits an alpha-done webhook
-    mid-run so the UI can stream hints before mattes
+  - `POST /alpha` — GVM → alpha hint URLs
+  - `POST /key` — CorridorKey (takes alpha hints) → matte / fg / comp /
+    processed URLs
+  - `POST /pipeline` — chains both; emits an alpha-done webhook mid-run
 - Convex `httpAction` receivers at `/fal-webhook/alpha` + `/fal-webhook/key`,
-  signature-verified, bulk-insert `frames` rows
-- Convex `key.submit` action — the only place that holds `FAL_KEY`,
-  called from the client via mutation-style invocation
+  bulk-insert `frames` rows. HMAC signature verification scaffolded but
+  bypassed for now (Slice 4 follow-up: real Ed25519 verification, task #19)
+- Convex `keying.dispatch` action — the only place that holds `FAL_KEY`;
+  `clips.saveAndDispatchKey` chains save + dispatch in one call
 - Frontend: reactive `frames.listByClip` feeds DualViewer layer outputs,
   FrameScrubber processed tint, TopBar KEYED-FRAMES chip
+- DualViewer preloads every per-layer URL on layer/clip change so playback
+  doesn't lag on full-res output PNGs
+- ClipRow click loads a saved Convex clip into the viewer (active highlight)
 - STOP calls `fal.queue.cancel`
-- Parameter panel already wired from slice 3 — here we just ship the
-  payload to fal
+- Source frames decoded as JPEG (not PNG) so tmpfs stays in budget on the
+  M-tier container
+
+### Slice 4.5 — Real CorridorKey + GVM inference ⏳
+
+Goal: replace the stub matte path with the actual GreenFormer + GVM
+engines from the CorridorKey monorepo, running on GPU-A100.
+
+- Dockerfile rewrite: `nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04` base
+  + git clone of `https://github.com/apekshik/CorridorKey.git` pinned to
+  an explicit SHA + torch 2.8 cu121 + upstream pyproject deps
+- `KeyingApp.setup()` downloads weights to fal's persistent `/data` volume
+  on first cold start: `nikopueringer/CorridorKey_v1.0` (~400 MB) +
+  `geyongtao/gvm` (~80 GB). Subsequent cold starts are weight-cache hits
+- Engines instantiated once in `setup()` and stored on `self.ck_engine` /
+  `self.gvm`; per-request latency = pure inference
+- `_run_gvm` / `_run_corridorkey` converted to methods using the loaded
+  engines; stub helpers removed entirely
+- `machine_type = "GPU-A100"`, `keep_alive = 600`
+- Webhook contract, frames-table shape, frontend wiring — unchanged from
+  Slice 4
 
 ### Slice 5 — Hint Painter + Usage / cost tracking ⏳
 
@@ -297,6 +323,7 @@ corridorkey-studio/
 - Convex prod: `https://prestigious-parakeet-797.convex.cloud`
   (HTTP actions: `https://prestigious-parakeet-797.convex.site`)
 - fal extract app: `apek/corridorkey-studio-extract`
+- fal keying app: `apek/corridorkey-studio-key`
 
 ## Environment variables
 

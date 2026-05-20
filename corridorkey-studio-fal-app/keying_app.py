@@ -45,44 +45,72 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Container image — torch + ffmpeg + opencv + huggingface_hub
+# Container image — CUDA + CorridorKey/GVM repo + torch+cu121 + heavy deps
 # ---------------------------------------------------------------------------
 
-# Until the CorridorKey / GVM repos are added here, the app runs in stub mode
-# and returns green-threshold mattes. To enable real inference, add (roughly):
-#
-#   RUN git clone https://github.com/<...>/CorridorKey /opt/CorridorKey \
-#    && pip install -e /opt/CorridorKey
-#   RUN git clone https://github.com/<...>/gvm-core /opt/gvm-core \
-#    && pip install -e /opt/gvm-core
-#   ENV PYTHONPATH=/opt/CorridorKey:/opt/gvm-core:$PYTHONPATH
-#
-# and bump machine_type to GPU-H100.
+# Pin the CorridorKey monorepo to an explicit SHA so deploys are reproducible.
+# Bump this when you want a newer model/code revision.
+_CORRIDORKEY_REPO = "https://github.com/apekshik/CorridorKey.git"
+_CORRIDORKEY_SHA = "cddabf3115ddb7d7db3dc212eea4363d7bacb434"
 
-_dockerfile = """
-FROM python:3.12-slim
+_dockerfile = f"""
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \\
+    PYTHONDONTWRITEBYTECODE=1 \\
+    PYTHONUNBUFFERED=1 \\
+    PIP_NO_CACHE_DIR=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \\
+    python3.11 python3.11-venv python3-pip \\
     ffmpeg \\
-    curl \\
-    git \\
- && rm -rf /var/lib/apt/lists/*
+    libgl1 libglib2.0-0 \\
+    git curl ca-certificates \\
+ && rm -rf /var/lib/apt/lists/* \\
+ && ln -sf /usr/bin/python3.11 /usr/local/bin/python \\
+ && ln -sf /usr/bin/python3.11 /usr/local/bin/python3
 
-RUN pip install --no-cache-dir \\
-    opencv-python-headless \\
-    numpy \\
-    requests \\
-    huggingface_hub
+# Clone the CorridorKey monorepo (contains CorridorKeyModule/ and gvm_core/)
+RUN git clone {_CORRIDORKEY_REPO} /opt/CorridorKey \\
+ && cd /opt/CorridorKey && git checkout {_CORRIDORKEY_SHA}
 
-# Torch is the heaviest dep; pinned for reproducibility. Skip the +cu121
-# wheel index for stub mode (CPU only). Add the index when enabling GPU.
-RUN pip install --no-cache-dir torch==2.5.1
+# Torch first (heaviest; pinned). CUDA 12.1 wheels match the base image.
+RUN python -m pip install --upgrade pip \\
+ && python -m pip install --index-url https://download.pytorch.org/whl/cu121 \\
+        torch==2.8.0 torchvision==0.23.0
+
+# Upstream pyproject deps minus the mlx/rocm/windows-only extras
+RUN python -m pip install \\
+        timm==1.0.24 \\
+        numpy \\
+        opencv-python-headless \\
+        tqdm \\
+        setuptools \\
+        diffusers \\
+        transformers \\
+        accelerate \\
+        peft \\
+        av \\
+        Pillow \\
+        PIMS \\
+        easydict \\
+        imageio \\
+        matplotlib \\
+        einops \\
+        kornia \\
+        huggingface-hub \\
+        requests
 
 # fal-required packages MUST be installed LAST
-RUN pip install --no-cache-dir \\
-    boto3==1.35.74 \\
-    protobuf==4.25.1 \\
-    pydantic==2.10.6
+RUN python -m pip install \\
+        boto3==1.35.74 \\
+        protobuf==4.25.1 \\
+        pydantic==2.10.6
+
+ENV OPENCV_IO_ENABLE_OPENEXR=1 \\
+    PYTHONPATH=/opt/CorridorKey \\
+    CORRIDORKEY_SKIP_COMPILE=1 \\
+    HF_HUB_ENABLE_HF_TRANSFER=1
 
 WORKDIR /app
 """
@@ -238,34 +266,110 @@ def _post_webhook(url: str, body: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Inference orchestration — falls back to stubs when the model repos aren't
-# bundled in the container.
+# Weights: persistent across cold starts on fal's /data volume.
 # ---------------------------------------------------------------------------
 
-def _gvm_available() -> bool:
-    try:
-        import gvm_core  # noqa: F401
-        return True
-    except ImportError:
-        return False
+# /data is mounted from a fal persistent volume scoped to the app. First cold
+# start downloads ~80 GB (mostly GVM). Every subsequent cold start is a no-op.
+_WEIGHTS_ROOT = Path("/data/weights")
+_CK_CHECKPOINT = _WEIGHTS_ROOT / "corridorkey" / "CorridorKey_v1.0.pth"
+_GVM_WEIGHTS_DIR = _WEIGHTS_ROOT / "gvm"
+
+_CK_HF_REPO = "nikopueringer/CorridorKey_v1.0"
+_CK_HF_FILE = "CorridorKey_v1.0.pth"
+_GVM_HF_REPO = "geyongtao/gvm"
 
 
-def _corridorkey_available() -> bool:
-    try:
-        from CorridorKeyModule.backend import create_engine  # noqa: F401
-        return True
-    except ImportError:
-        return False
+def _ensure_corridorkey_checkpoint() -> Path:
+    """Download the CorridorKey .pth into /data on first cold start; reuse after."""
+    from huggingface_hub import hf_hub_download
+
+    if _CK_CHECKPOINT.exists():
+        return _CK_CHECKPOINT
+    _CK_CHECKPOINT.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Downloading CorridorKey checkpoint to %s", _CK_CHECKPOINT)
+    path = hf_hub_download(
+        repo_id=_CK_HF_REPO,
+        filename=_CK_HF_FILE,
+        local_dir=str(_CK_CHECKPOINT.parent),
+    )
+    # hf_hub_download returns the final path — symlink/rename so we have a
+    # stable location regardless of HF's internal layout
+    final = Path(path)
+    if final != _CK_CHECKPOINT and not _CK_CHECKPOINT.exists():
+        _CK_CHECKPOINT.symlink_to(final)
+    return _CK_CHECKPOINT
 
 
-def _run_gvm(frames_dir: Path, hints_dir: Path) -> None:
-    """Run GVM batch sequence → grayscale alpha hint PNGs in `hints_dir`."""
-    hints_dir.mkdir(parents=True, exist_ok=True)
-    if _gvm_available():
+def _ensure_gvm_weights() -> Path:
+    """Download the GVM HF tree (~80 GB) into /data on first cold start."""
+    from huggingface_hub import snapshot_download
+
+    # snapshot_download checks file digests, so it's safe to call every time —
+    # but skip the call entirely if we've already populated the dir to avoid
+    # an unnecessary network roundtrip on every cold start.
+    marker = _GVM_WEIGHTS_DIR / ".fal_complete"
+    if marker.exists():
+        return _GVM_WEIGHTS_DIR
+
+    _GVM_WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info("Downloading GVM weights to %s (one-time, ~80 GB)", _GVM_WEIGHTS_DIR)
+    snapshot_download(
+        repo_id=_GVM_HF_REPO,
+        local_dir=str(_GVM_WEIGHTS_DIR),
+        max_workers=8,
+    )
+    marker.touch()
+    return _GVM_WEIGHTS_DIR
+
+
+# ---------------------------------------------------------------------------
+# fal App — engines load once in setup(); endpoints run inference per request.
+# ---------------------------------------------------------------------------
+
+class KeyingApp(fal.App, keep_alive=600):
+    app_name = "corridorkey-studio-key"
+    machine_type = "GPU-A100"
+    image = _image
+
+    def setup(self):
+        # 1. Sanity-check binaries.
+        try:
+            subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
+        except Exception as e:
+            raise RuntimeError(f"ffmpeg binary not available in container: {e}")
+
+        # 2. Make weights available on /data (one-time cost on the very first
+        # cold start; idempotent on every subsequent one).
+        ck_ckpt = _ensure_corridorkey_checkpoint()
+        gvm_dir = _ensure_gvm_weights()
+
+        # 3. Build engines on CUDA. Imports are deferred to setup() so module
+        # import doesn't pay torch's startup cost during container probes.
+        import torch
+        from CorridorKeyModule.inference_engine import CorridorKeyEngine
         from gvm_core.wrapper import GVMProcessor
 
-        processor = GVMProcessor(device="cuda")
-        processor.process_sequence(
+        logger.info("Loading CorridorKey engine (checkpoint=%s)", ck_ckpt)
+        self.ck_engine = CorridorKeyEngine(
+            checkpoint_path=str(ck_ckpt),
+            device="cuda",
+            img_size=2048,
+            model_precision=torch.float16,
+        )
+
+        logger.info("Loading GVM processor (weights=%s)", gvm_dir)
+        self.gvm = GVMProcessor(model_base=str(gvm_dir), device="cuda")
+        logger.info("Models loaded — KeyingApp ready.")
+
+    # -----------------------------------------------------------------------
+    # Inference helpers — backed by the engines loaded in setup().
+    # -----------------------------------------------------------------------
+
+    def _run_gvm(self, frames_dir: Path, hints_dir: Path) -> None:
+        """GVM batch sequence → grayscale alpha hint PNGs in `hints_dir`."""
+        hints_dir.mkdir(parents=True, exist_ok=True)
+        self.gvm.process_sequence(
             input_path=str(frames_dir),
             output_dir=str(hints_dir.parent),
             num_frames_per_batch=1,
@@ -274,148 +378,75 @@ def _run_gvm(frames_dir: Path, hints_dir: Path) -> None:
             mode="matte",
             direct_output_dir=str(hints_dir),
         )
-        return
 
-    # Stub: green-threshold each frame
-    _green_threshold_stub(frames_dir, hints_dir)
+    def _run_corridorkey(
+        self,
+        frames_dir: Path,
+        hints_dir: Path,
+        out_dir: Path,
+        settings: InferenceSettings,
+        output_config: OutputConfig,
+    ) -> dict[str, list[Path]]:
+        """CorridorKey per frame → matte/fg/comp/processed PNGs grouped by kind."""
+        import cv2
+        import numpy as np
 
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "matte").mkdir(exist_ok=True)
+        (out_dir / "fg").mkdir(exist_ok=True)
+        (out_dir / "comp").mkdir(exist_ok=True)
+        (out_dir / "processed").mkdir(exist_ok=True)
 
-def _green_threshold_stub(frames_dir: Path, hints_dir: Path) -> None:
-    import cv2
-    import numpy as np
+        outputs: dict[str, list[Path]] = {"matte": [], "fg": [], "comp": [], "processed": []}
 
-    for frame_path in _source_frames(frames_dir):
-        img = cv2.imread(str(frame_path), cv2.IMREAD_COLOR)
-        if img is None:
-            continue
-        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-        green_excess = g - np.maximum(r, b)
-        alpha = (1.0 - np.clip(green_excess * 3.0, 0.0, 1.0)) * 255
-        cv2.imwrite(str(hints_dir / f"{frame_path.stem}.png"), alpha.astype("uint8"))
+        for frame_path in _source_frames(frames_dir):
+            name = frame_path.stem
+            bgr = cv2.imread(str(frame_path), cv2.IMREAD_COLOR)
+            if bgr is None:
+                continue
+            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
 
+            hint_path = hints_dir / f"{name}.png"
+            hint_img = cv2.imread(str(hint_path), cv2.IMREAD_GRAYSCALE) if hint_path.exists() else None
+            mask = (hint_img.astype(np.float32) / 255.0) if hint_img is not None else np.ones(rgb.shape[:2], dtype=np.float32)
 
-def _run_corridorkey(
-    frames_dir: Path,
-    hints_dir: Path,
-    out_dir: Path,
-    settings: InferenceSettings,
-    output_config: OutputConfig,
-) -> dict[str, list[Path]]:
-    """Run CorridorKey per frame, return paths to outputs grouped by kind."""
-    import cv2
-    import numpy as np
+            result = self.ck_engine.process_frame(
+                rgb, mask,
+                refiner_scale=settings.refinerScale,
+                input_is_linear=settings.inputIsLinear,
+                despill_strength=settings.despillStrength,
+                auto_despeckle=settings.autoDespeckle,
+                despeckle_size=settings.despeckleSize,
+            )
+            if isinstance(result, list):
+                result = result[0]
+            matte = result.get("alpha")
+            fg = result.get("fg")
+            comp = result.get("comp", fg)
+            processed = result.get("processed")
+            if processed is None and matte is not None and fg is not None:
+                m3 = matte if matte.ndim == 3 else matte[..., np.newaxis]
+                processed = np.concatenate([fg, m3], axis=-1)
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "matte").mkdir(exist_ok=True)
-    (out_dir / "fg").mkdir(exist_ok=True)
-    (out_dir / "comp").mkdir(exist_ok=True)
-    (out_dir / "processed").mkdir(exist_ok=True)
+            if output_config.matteEnabled and matte is not None:
+                mp = out_dir / "matte" / f"{name}.png"
+                cv2.imwrite(str(mp), (np.clip(matte.squeeze(), 0, 1) * 255).astype("uint8"))
+                outputs["matte"].append(mp)
+            if output_config.fgEnabled and fg is not None:
+                fp = out_dir / "fg" / f"{name}.png"
+                cv2.imwrite(str(fp), cv2.cvtColor((np.clip(fg, 0, 1) * 255).astype("uint8"), cv2.COLOR_RGB2BGR))
+                outputs["fg"].append(fp)
+            if (output_config.compEnabled or output_config.generateCompPreview) and comp is not None:
+                cp = out_dir / "comp" / f"{name}.png"
+                cv2.imwrite(str(cp), cv2.cvtColor((np.clip(comp, 0, 1) * 255).astype("uint8"), cv2.COLOR_RGB2BGR))
+                outputs["comp"].append(cp)
+            if output_config.processedEnabled and processed is not None:
+                pp = out_dir / "processed" / f"{name}.png"
+                rgba = (np.clip(processed, 0, 1) * 255).astype("uint8")
+                cv2.imwrite(str(pp), cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGRA))
+                outputs["processed"].append(pp)
 
-    engine = None
-    if _corridorkey_available():
-        try:
-            from CorridorKeyModule.backend import create_engine
-            engine = create_engine(device="cuda")
-        except Exception as e:
-            logger.warning("CorridorKey engine init failed (%s) — falling back to stub", e)
-
-    outputs: dict[str, list[Path]] = {"matte": [], "fg": [], "comp": [], "processed": []}
-
-    frame_files = _source_frames(frames_dir)
-    for frame_path in frame_files:
-        name = frame_path.stem
-        bgr = cv2.imread(str(frame_path), cv2.IMREAD_COLOR)
-        if bgr is None:
-            continue
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-        hint_path = hints_dir / f"{name}.png"
-        if hint_path.exists():
-            hint_img = cv2.imread(str(hint_path), cv2.IMREAD_GRAYSCALE)
-            hint = (hint_img.astype(np.float32) / 255.0) if hint_img is not None else None
-        else:
-            hint = None
-
-        if engine is not None:
-            try:
-                result = engine.process_frame(
-                    rgb, hint,
-                    refiner_scale=settings.refinerScale,
-                    input_is_linear=settings.inputIsLinear,
-                    despill_strength=settings.despillStrength,
-                    auto_despeckle=settings.autoDespeckle,
-                    despeckle_size=settings.despeckleSize,
-                )
-                if isinstance(result, list):
-                    result = result[0]
-                matte = result.get("alpha")
-                fg = result.get("fg")
-                comp = result.get("comp")
-                processed = result.get("processed")
-            except Exception as e:
-                logger.warning("CorridorKey process_frame failed (%s) — falling back to stub for %s", e, name)
-                matte, fg, comp, processed = _stub_outputs(rgb, hint)
-        else:
-            matte, fg, comp, processed = _stub_outputs(rgb, hint)
-
-        if output_config.matteEnabled:
-            mp = out_dir / "matte" / f"{name}.png"
-            cv2.imwrite(str(mp), (np.clip(matte.squeeze(), 0, 1) * 255).astype("uint8"))
-            outputs["matte"].append(mp)
-        if output_config.fgEnabled:
-            fp = out_dir / "fg" / f"{name}.png"
-            cv2.imwrite(str(fp), cv2.cvtColor((np.clip(fg, 0, 1) * 255).astype("uint8"), cv2.COLOR_RGB2BGR))
-            outputs["fg"].append(fp)
-        if output_config.compEnabled or output_config.generateCompPreview:
-            cp = out_dir / "comp" / f"{name}.png"
-            cv2.imwrite(str(cp), cv2.cvtColor((np.clip(comp, 0, 1) * 255).astype("uint8"), cv2.COLOR_RGB2BGR))
-            outputs["comp"].append(cp)
-        if output_config.processedEnabled:
-            pp = out_dir / "processed" / f"{name}.png"
-            # processed = RGBA premult — save with alpha
-            rgba = (np.clip(processed, 0, 1) * 255).astype("uint8")
-            cv2.imwrite(str(pp), cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGRA))
-            outputs["processed"].append(pp)
-
-    return outputs
-
-
-def _stub_outputs(rgb, hint):
-    """Green-threshold fallback when CorridorKey isn't available."""
-    import numpy as np
-
-    h, w = rgb.shape[:2]
-    if hint is not None:
-        matte = hint[..., np.newaxis] if hint.ndim == 2 else hint
-    else:
-        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-        green_excess = g - np.maximum(r, b)
-        matte = (1.0 - np.clip(green_excess * 4.0, 0.0, 1.0))[..., np.newaxis].astype(np.float32)
-
-    fg = rgb * matte
-    # Cheap checkerboard for comp
-    y, x = np.arange(h) // 16, np.arange(w) // 16
-    gray = np.where((y[:, None] + x[None, :]) % 2, 0.3, 0.2).astype(np.float32)
-    checker = np.stack([gray, gray, gray], axis=-1)
-    comp = fg + checker * (1.0 - matte)
-    processed = np.concatenate([fg, matte], axis=-1)
-    return matte, fg, comp, processed
-
-
-# ---------------------------------------------------------------------------
-# fal App
-# ---------------------------------------------------------------------------
-
-class KeyingApp(fal.App, keep_alive=300):
-    app_name = "corridorkey-studio-key"
-    machine_type = "M"    # XS OOMs decoding 1080p; bump to GPU-H100 once CorridorKey/GVM repos bundled
-    image = _image
-
-    def setup(self):
-        try:
-            subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
-        except Exception as e:
-            raise RuntimeError(f"ffmpeg binary not available in container: {e}")
+        return outputs
 
     # -----------------------------------------------------------------------
     # /alpha — GVM only
@@ -433,7 +464,7 @@ class KeyingApp(fal.App, keep_alive=300):
             _decode_to_sequence(str(video_path), frames_dir)
 
             hints_dir = work_dir / "hints"
-            _run_gvm(frames_dir, hints_dir)
+            self._run_gvm(frames_dir, hints_dir)
 
             hint_files = sorted(hints_dir.glob("*.png"))
             urls = _upload_parallel(hint_files, "image/png")
@@ -471,7 +502,7 @@ class KeyingApp(fal.App, keep_alive=300):
                 _fetch_url(url, hints_dir / f"{i:06d}.png")
 
             out_dir = work_dir / "out"
-            outputs = _run_corridorkey(
+            outputs = self._run_corridorkey(
                 frames_dir, hints_dir, out_dir, input.settings, input.output_config
             )
 
@@ -516,7 +547,7 @@ class KeyingApp(fal.App, keep_alive=300):
 
             # 1. GVM
             hints_dir = work_dir / "hints"
-            _run_gvm(frames_dir, hints_dir)
+            self._run_gvm(frames_dir, hints_dir)
             hint_files = sorted(hints_dir.glob("*.png"))
             hint_urls = _upload_parallel(hint_files, "image/png")
             alpha_frames = [
@@ -539,7 +570,7 @@ class KeyingApp(fal.App, keep_alive=300):
 
             # 3. CorridorKey
             out_dir = work_dir / "out"
-            outputs = _run_corridorkey(
+            outputs = self._run_corridorkey(
                 frames_dir, hints_dir, out_dir, input.settings, input.output_config
             )
 
