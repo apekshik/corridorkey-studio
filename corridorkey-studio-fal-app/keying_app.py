@@ -447,7 +447,16 @@ class KeyingApp(
 
             hint_path = hints_dir / f"{name}.png"
             hint_img = cv2.imread(str(hint_path), cv2.IMREAD_GRAYSCALE) if hint_path.exists() else None
-            mask = (hint_img.astype(np.float32) / 255.0) if hint_img is not None else np.ones(rgb.shape[:2], dtype=np.float32)
+            if hint_img is not None:
+                # GVM emits hints at its own internal resolution (often
+                # different from the source). CorridorKey's process_frame
+                # requires mask.shape == frame.shape[:2], so resize here.
+                fh, fw = rgb.shape[:2]
+                if hint_img.shape != (fh, fw):
+                    hint_img = cv2.resize(hint_img, (fw, fh), interpolation=cv2.INTER_LINEAR)
+                mask = hint_img.astype(np.float32) / 255.0
+            else:
+                mask = np.ones(rgb.shape[:2], dtype=np.float32)
 
             result = self.ck_engine.process_frame(
                 rgb, mask,
