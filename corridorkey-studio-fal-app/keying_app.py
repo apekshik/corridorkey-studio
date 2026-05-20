@@ -216,7 +216,21 @@ def _decode_to_sequence(video_path: str, out_dir: Path) -> list[Path]:
         "-q:v", "2",        # JPEG quality (1=best, 31=worst); 2 ≈ Q95
         out_pattern,
     ]
-    subprocess.run(cmd, check=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        # ffmpeg's stderr is the only place that tells us what really
+        # broke (missing codec, corrupt input, bad PATH). Surface it.
+        import shutil as _shutil
+        which_ffmpeg = _shutil.which("ffmpeg") or "<not on PATH>"
+        try:
+            size = Path(video_path).stat().st_size
+        except Exception:
+            size = -1
+        raise RuntimeError(
+            f"ffmpeg decode failed (rc={result.returncode}). "
+            f"ffmpeg={which_ffmpeg}, input={video_path} ({size} bytes). "
+            f"stderr:\n{result.stderr}"
+        )
     return sorted(out_dir.glob("*.jpg"))
 
 
