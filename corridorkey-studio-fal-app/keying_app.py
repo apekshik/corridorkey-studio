@@ -74,7 +74,7 @@ ENV DEBIAN_FRONTEND=noninteractive \\
 RUN apt-get update && apt-get install -y --no-install-recommends \\
     ffmpeg \\
     libgl1 libglib2.0-0 \\
-    git ca-certificates \\
+    git curl ca-certificates \\
  && rm -rf /var/lib/apt/lists/*
 
 # Upstream pyproject.toml deps minus the mlx/rocm/windows-only extras.
