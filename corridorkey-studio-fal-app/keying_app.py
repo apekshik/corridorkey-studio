@@ -211,7 +211,8 @@ def _decode_to_sequence(video_path: str, out_dir: Path) -> list[Path]:
         "-hide_banner",
         "-loglevel", "error",
         "-i", video_path,
-        "-fps_mode", "passthrough",
+        "-vsync", "0",      # older-ffmpeg-compatible name for fps_mode=passthrough
+                            # (apt ffmpeg on pytorch's ubuntu base is 4.x)
         "-start_number", "0",
         "-q:v", "2",        # JPEG quality (1=best, 31=worst); 2 ≈ Q95
         out_pattern,
