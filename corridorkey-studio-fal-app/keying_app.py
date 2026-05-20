@@ -58,12 +58,13 @@ logger = logging.getLogger(__name__)
 _CORRIDORKEY_REPO = "https://github.com/apekshik/CorridorKey"
 _CORRIDORKEY_SHA = "cddabf3115ddb7d7db3dc212eea4363d7bacb434"
 
-# Base image gives us python 3.11 + torch 2.8.0 + cuda 12.1 + cudnn 9 already
+# Base image gives us python + torch 2.8.0 + cuda 12.6 + cudnn 9 already
 # wired up, so we don't fight version skew between the torch wheel's bundled
-# CUDA runtime and the system CUDA. This is the same pattern fal's own
-# fal-demos/audio/diffrhythm.py uses.
+# CUDA runtime and the system CUDA. Same pattern as fal's own
+# fal-demos/audio/diffrhythm.py. (cuda 12.1 doesn't exist for torch 2.8 on
+# Docker Hub — 12.6 is the lowest tag and is fully A100-compatible.)
 _dockerfile = """
-FROM pytorch/pytorch:2.8.0-cuda12.1-cudnn9-runtime
+FROM pytorch/pytorch:2.8.0-cuda12.6-cudnn9-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \\
     PYTHONDONTWRITEBYTECODE=1 \\
