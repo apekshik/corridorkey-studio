@@ -9,6 +9,9 @@
  */
 
 import type * as clips from "../clips.js";
+import type * as frames from "../frames.js";
+import type * as http from "../http.js";
+import type * as keying from "../keying.js";
 import type * as projects from "../projects.js";
 import type * as users from "../users.js";
 
@@ -20,6 +23,9 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   clips: typeof clips;
+  frames: typeof frames;
+  http: typeof http;
+  keying: typeof keying;
   projects: typeof projects;
   users: typeof users;
 }>;

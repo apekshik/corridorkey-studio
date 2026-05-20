@@ -71,7 +71,7 @@ export async function importClip(file: File): Promise<void> {
     const result = (await fal.subscribe(EXTRACT_APP_ID, {
       input: {
         video_url: sourceUrl,
-        max_dim: 480,
+        max_dim: 1080,
         jpeg_quality: 80,
       },
       logs: false,

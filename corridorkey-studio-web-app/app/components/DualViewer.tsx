@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, DragEvent } from "react";
+import { useQuery } from "convex/react";
 import { Ruler, Upload } from "lucide-react";
 import { useSessionClipStore } from "../stores/useSessionClipStore";
 import { importClip } from "../lib/importClip";
+import { api } from "../../convex/_generated/api";
+import type { Doc } from "../../convex/_generated/dataModel";
 
 type Layer = "alpha" | "fg" | "matte" | "comp" | "processed";
 type ViewMode = "split-h" | "split-v" | "single";
@@ -34,6 +37,42 @@ export default function DualViewer() {
   const frameUrl =
     session.meta?.previewFrameUrls?.[session.currentFrame] ?? null;
   const busy = session.stage === "uploading" || session.stage === "extracting";
+
+  // Reactive subscription to keying outputs. Skipped until the clip has been
+  // persisted (i.e. KEY has been pressed at least once).
+  const frames = useQuery(
+    api.frames.listByClip,
+    session.savedClipId ? { clipId: session.savedClipId } : "skip"
+  );
+  const framesByNum = useMemo(() => {
+    const m = new Map<number, Doc<"frames">>();
+    for (const f of frames ?? []) m.set(f.frameNum, f);
+    return m;
+  }, [frames]);
+  const currentFrameDoc = framesByNum.get(session.currentFrame);
+  const outputFrameUrl = currentFrameDoc
+    ? layerUrl(currentFrameDoc, layer)
+    : null;
+
+  // Preload every URL for the active layer the moment frames land so the
+  // browser cache is warm before the user hits play. Full-res keying PNGs
+  // are too heavy to fetch on-demand at 24 fps. Cheap: one Image() per URL,
+  // browser dedupes via its own HTTP cache.
+  useEffect(() => {
+    if (!frames || frames.length === 0) return;
+    const handles: HTMLImageElement[] = [];
+    for (const f of frames) {
+      const url = layerUrl(f, layer);
+      if (!url) continue;
+      const img = new Image();
+      img.decoding = "async";
+      img.src = url;
+      handles.push(img);
+    }
+    return () => {
+      for (const img of handles) img.src = "";
+    };
+  }, [frames, layer]);
 
   const onDragOver = useCallback((e: DragEvent) => {
     if (e.dataTransfer.types.includes("Files")) {
@@ -112,6 +151,8 @@ export default function DualViewer() {
             stage={session.stage}
             ruler={ruler}
             checker={checker}
+            frameUrl={outputFrameUrl}
+            frameIndex={session.currentFrame}
           />
         </div>
 
@@ -310,11 +351,15 @@ function OutputPane({
   stage,
   ruler,
   checker,
+  frameUrl,
+  frameIndex,
 }: {
   layer: Layer;
   stage: string;
   ruler: boolean;
   checker: boolean;
+  frameUrl: string | null;
+  frameIndex: number;
 }) {
   return (
     <div className="relative overflow-hidden bg-[#0a0a0a]">
@@ -332,10 +377,32 @@ function OutputPane({
         />
       )}
 
-      {/* Crosshair */}
+      {frameUrl ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#050506] z-[2]">
+          <img
+            // eslint-disable-next-line @next/next/no-img-element
+            src={frameUrl}
+            alt={`${layer} frame ${frameIndex}`}
+            className="max-w-full max-h-full object-contain"
+          />
+        </div>
+      ) : (
+        <Slate>
+          <SlateTitle>
+            {stage === "ready" ? `${layer.toUpperCase()} pending` : "No output"}
+          </SlateTitle>
+          <SlateRow k="Layer">{outputLayerLabel(layer)}</SlateRow>
+          <SlateRow k="Status">
+            {stage === "ready" ? "AWAITING KEY" : "NO CLIP"}
+          </SlateRow>
+          <SlateRow k="Pipeline">slice 4 · fal webhook</SlateRow>
+        </Slate>
+      )}
+
+      {/* Crosshair sits above everything else */}
       {ruler && (
         <div
-          className="absolute inset-0 pointer-events-none"
+          className="absolute inset-0 pointer-events-none z-[3]"
           style={{
             background:
               "linear-gradient(to right, transparent calc(50% - 0.5px), rgba(255,255,255,0.05) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px)), linear-gradient(to bottom, transparent calc(50% - 0.5px), rgba(255,255,255,0.05) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px))",
@@ -343,20 +410,24 @@ function OutputPane({
         />
       )}
 
-      <Slate>
-        <SlateTitle>
-          {stage === "ready" ? `${layer.toUpperCase()} pending` : "No output"}
-        </SlateTitle>
-        <SlateRow k="Layer">{outputLayerLabel(layer)}</SlateRow>
-        <SlateRow k="Status">
-          {stage === "ready" ? "AWAITING KEY" : "NO CLIP"}
-        </SlateRow>
-        <SlateRow k="Pipeline">slice 4 · fal webhook</SlateRow>
-      </Slate>
-
       <PaneLabel tag="B" label={outputLayerLabel(layer)} />
     </div>
   );
+}
+
+function layerUrl(frame: Doc<"frames">, layer: Layer): string | null {
+  switch (layer) {
+    case "alpha":
+      return frame.alphaHintUrl ?? null;
+    case "fg":
+      return frame.fgUrl ?? null;
+    case "matte":
+      return frame.matteUrl ?? null;
+    case "comp":
+      return frame.compUrl ?? null;
+    case "processed":
+      return frame.processedUrl ?? null;
+  }
 }
 
 /* ----------------------------- plate + slate ---------------------------- */

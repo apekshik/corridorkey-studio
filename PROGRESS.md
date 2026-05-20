@@ -6,17 +6,14 @@ the default backend mode in the web app.
 
 ## Now
 
-- **Shipped:** Slices 1 + 2 — auth, Convex shell, extract fal app, session
-  clip import + preview scrubbing
-- **In flight:** Slice 3 on branch `slice-3-design-projects` — v2 design
-  pass + projects shell, started once the v2 prototype HTML landed at
-  `DESIGN_MOCK.html`
+- **Shipped:** Slices 1 + 2 + 3 — auth, Convex shell, extract fal app,
+  session clip import + preview scrubbing, v2 design pass + projects shell
+- **In flight:** Slice 4 on branch `slice-4-keying-pipeline` — cloud keying
+  fal app + Convex action dispatch + webhook-driven frame writes
 - **Waiting on:** nothing
-- **Next slice:** Slice 4 (keying pipeline) — the cloud fal app +
-  webhook-driven frame writes. Rolled to slice 4 because projects must
-  exist before frames can be attached to anything stable
+- **Next slice:** Slice 5 (Hint Painter modal + VideoMaMa + usage tracking)
 
-Last updated: 2026-04-20, start of slice 3.
+Last updated: 2026-05-17, start of slice 4.
 
 ## Stack
 
@@ -76,7 +73,7 @@ Shipped: commit `7f1b6f0`
 - fal apps bind to **one** machine type per app → extract (CPU) and key
   (GPU) must be separate apps
 
-### Slice 3 — v2 design + projects shell ⏳ (in flight)
+### Slice 3 — v2 design + projects shell ✅
 
 Goal: reskin the app to the v2 prototype (`DESIGN_MOCK.html`) and stand up
 the projects model so slice 4 has somewhere to attach frames. No keying

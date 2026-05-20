@@ -282,14 +282,22 @@ function ClipRow({ clip }: { clip: Doc<"clips"> }) {
       ? "AUTO · GVM"
       : clip.codec ?? "";
 
+  const loadFromClip = useSessionClipStore((s) => s.loadFromClip);
+  const activeClipId = useSessionClipStore((s) => s.savedClipId);
+  const isActive = activeClipId === clip._id;
+
   return (
     <li
-      className="grid gap-2.5 border-b border-[var(--rule)] cursor-pointer relative items-stretch hover:bg-[var(--bg-2)]"
+      className={`grid gap-2.5 border-b border-[var(--rule)] cursor-pointer relative items-stretch hover:bg-[var(--bg-2)] ${
+        isActive ? "bg-[var(--bg-2)]" : ""
+      }`}
       style={{
         gridTemplateColumns: "64px minmax(0, 1fr) auto",
         padding: "10px var(--pad)",
+        boxShadow: isActive ? "inset 2px 0 0 var(--accent)" : undefined,
       }}
       data-state={stateKey}
+      onClick={() => loadFromClip(clip)}
     >
       <Thumb
         src={clip.thumbnailUrl ?? undefined}

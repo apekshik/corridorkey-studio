@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { ChevronDown, Download, Settings } from "lucide-react";
 import UserMenu from "./UserMenu";
 import { useDirtyStore } from "../stores/useDirtyStore";
+import { useSessionClipStore } from "../stores/useSessionClipStore";
 import { api } from "../../convex/_generated/api";
 import { Doc, Id } from "../../convex/_generated/dataModel";
 
@@ -24,8 +25,13 @@ const SCOPES: { id: KeyScope; label: string; sub: string }[] = [
 
 export default function TopBar({ projectId, project, onSave, onOpenPane }: Props) {
   const clips = useQuery(api.clips.listByProject, { projectId }) ?? [];
+  const session = useSessionClipStore();
+  const saveAndDispatchKey = useAction(api.clips.saveAndDispatchKey);
+  const dispatchKey = useAction(api.keying.dispatch);
+  const cancelKey = useAction(api.keying.cancel);
   const [keyScope, setKeyScope] = useState<KeyScope>("ready");
   const [scopeOpen, setScopeOpen] = useState(false);
+  const [keyBusy, setKeyBusy] = useState(false);
   const keyGroupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,11 +50,76 @@ export default function TopBar({ projectId, project, onSave, onOpenPane }: Props
 
   const scopeCount = scopeCountFor(keyScope, clips);
   const currentScope = SCOPES.find((s) => s.id === keyScope)!;
-  // Keyed-frames coverage on the first clip (v1 stub until slice 4).
-  const coverageClip = clips[0];
-  const coverage = coverageClip
-    ? { n: 0, m: coverageClip.frameCount ?? 0 }
+
+  // Resolve the "active" clip: the in-session one if it's been saved, falling
+  // back to the most recent project clip. Frames coverage + KEY/STOP wiring
+  // hang off this id.
+  const savedClip = session.savedClipId
+    ? clips.find((c) => c._id === session.savedClipId) ?? null
     : null;
+  const activeClipId: Id<"clips"> | null = savedClip?._id ?? null;
+  const activeFrameCount = savedClip?.frameCount ?? session.meta?.frameCount ?? 0;
+  const isKeying = savedClip?.state === "KEYING";
+
+  const frames = useQuery(
+    api.frames.listByClip,
+    activeClipId ? { clipId: activeClipId } : "skip"
+  );
+  const keyedCount = frames?.filter((f) => f.processedUrl || f.matteUrl).length ?? 0;
+  const coverage =
+    activeFrameCount > 0 ? { n: keyedCount, m: activeFrameCount } : null;
+
+  const canKey =
+    !keyBusy &&
+    session.stage === "ready" &&
+    session.meta !== null &&
+    !isKeying;
+  const canStop = !keyBusy && activeClipId !== null && isKeying;
+
+  const onKey = async () => {
+    if (!canKey || !session.meta) return;
+    setKeyBusy(true);
+    try {
+      if (activeClipId) {
+        await dispatchKey({ clipId: activeClipId, scope: keyScope });
+      } else {
+        const { clipId } = await saveAndDispatchKey({
+          projectId,
+          name: session.meta.name,
+          sourceUrl: session.meta.sourceUrl,
+          thumbnailUrl: session.meta.thumbnailUrl,
+          previewFrameUrls: session.meta.previewFrameUrls,
+          frameCount: session.meta.frameCount,
+          fps: session.meta.fps,
+          durationS: session.meta.durationS,
+          width: session.meta.width,
+          height: session.meta.height,
+          codec: session.meta.codec,
+          inPoint: session.inPoint ?? undefined,
+          outPoint: session.outPoint ?? undefined,
+          currentFrame: session.currentFrame,
+          scope: keyScope,
+        });
+        session.setSavedClipId(clipId);
+      }
+    } catch (err) {
+      console.error("KEY dispatch failed:", err);
+    } finally {
+      setKeyBusy(false);
+    }
+  };
+
+  const onStop = async () => {
+    if (!canStop || !activeClipId) return;
+    setKeyBusy(true);
+    try {
+      await cancelKey({ clipId: activeClipId });
+    } catch (err) {
+      console.error("STOP failed:", err);
+    } finally {
+      setKeyBusy(false);
+    }
+  };
 
   return (
     <header
@@ -139,9 +210,14 @@ export default function TopBar({ projectId, project, onSave, onOpenPane }: Props
       {/* Right actions */}
       <div className="flex items-stretch border-l border-[var(--rule-strong)] shrink-0">
         <button
-          disabled
-          title="Stop all jobs — slice 4"
-          className="flex items-center gap-2 px-3 my-2 mr-1.5 ml-1 border border-[var(--rule-strong)] text-[var(--ink-2)] text-[10.5px] uppercase tracking-[0.2em] whitespace-nowrap opacity-50 cursor-not-allowed"
+          disabled={!canStop}
+          onClick={onStop}
+          title={canStop ? "Stop keying job" : "No active keying job"}
+          className={`flex items-center gap-2 px-3 my-2 mr-1.5 ml-1 border border-[var(--rule-strong)] text-[10.5px] uppercase tracking-[0.2em] whitespace-nowrap ${
+            canStop
+              ? "text-[var(--ink-0)] hover:bg-[var(--bg-2)]"
+              : "text-[var(--ink-2)] opacity-50 cursor-not-allowed"
+          }`}
           style={{ height: "calc(var(--topbar-h) - 16px)" }}
         >
           <span
@@ -164,11 +240,20 @@ export default function TopBar({ projectId, project, onSave, onOpenPane }: Props
           }}
         >
           <button
-            disabled
-            title="Key — slice 4"
-            className="flex items-center gap-2.5 px-3.5 border-r border-black/25 cursor-not-allowed opacity-80"
+            disabled={!canKey}
+            onClick={onKey}
+            title={
+              isKeying
+                ? "Keying in progress"
+                : canKey
+                ? `Run keying (${currentScope.label})`
+                : "Load a clip first"
+            }
+            className={`flex items-center gap-2.5 px-3.5 border-r border-black/25 ${
+              canKey ? "hover:brightness-110" : "cursor-not-allowed opacity-60"
+            }`}
           >
-            Key
+            {keyBusy ? "Dispatching…" : "Key"}
             <span className="text-[10px] font-medium opacity-70 tracking-[0.14em]">
               {currentScope.label.replace(/^Key /, "").toUpperCase()} ·{" "}
               {String(scopeCount).padStart(2, "0")}

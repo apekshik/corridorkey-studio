@@ -100,13 +100,15 @@ export default defineSchema({
 
     // fal.queue request id for webhook correlation
     falExtractRequestId: v.optional(v.string()),
+    falKeyingRequestId: v.optional(v.string()),
 
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId", "createdAt"])
     .index("by_project", ["projectId", "createdAt"])
-    .index("by_fal_extract_request", ["falExtractRequestId"]),
+    .index("by_fal_extract_request", ["falExtractRequestId"])
+    .index("by_fal_keying_request", ["falKeyingRequestId"]),
 
   // Output frames from keying. Sparse — rows only exist for frames that
   // have at least one rendered layer. A frame with only an alpha hint and

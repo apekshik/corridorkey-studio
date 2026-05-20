@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "convex/react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,6 +11,7 @@ import {
   SkipForward,
 } from "lucide-react";
 import { useSessionClipStore } from "../stores/useSessionClipStore";
+import { api } from "../../convex/_generated/api";
 
 /**
  * Scrub strip. Matches DESIGN_MOCK.html §2069–2093:
@@ -28,6 +30,7 @@ export default function FrameScrubber() {
     meta,
     currentFrame,
     setCurrentFrame,
+    savedClipId,
   } = useSessionClipStore();
   const [playing, setPlaying] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -35,6 +38,25 @@ export default function FrameScrubber() {
   const ready = stage === "ready" && meta !== null;
   const frameCount = meta?.frameCount ?? 0;
   const fps = meta?.fps ?? 24;
+
+  // Processed-region tint: extends from frame 0 to the furthest frame with a
+  // processed (or matte) output. Subscribes to the same frames query as the
+  // viewer so updates land as the keying webhook fires.
+  const frames = useQuery(
+    api.frames.listByClip,
+    savedClipId ? { clipId: savedClipId } : "skip"
+  );
+  const processedPct = useMemo(() => {
+    if (!frameCount || !frames || frames.length === 0) return 0;
+    let maxNum = -1;
+    for (const f of frames) {
+      if ((f.processedUrl || f.matteUrl) && f.frameNum > maxNum) {
+        maxNum = f.frameNum;
+      }
+    }
+    if (maxNum < 0) return 0;
+    return Math.min(100, ((maxNum + 1) / frameCount) * 100);
+  }, [frames, frameCount]);
 
   // Spacebar play/pause.
   useEffect(() => {
@@ -146,11 +168,11 @@ export default function FrameScrubber() {
         className="relative h-[42px] bg-[var(--bg-0)] border border-[var(--rule)] overflow-hidden"
         style={{ cursor: ready ? "pointer" : "default" }}
       >
-        {/* Processed region tint (slice 4 drives this from `frames`) */}
+        {/* Processed region tint — driven by frames.listByClip */}
         <div
-          className="absolute left-0 top-0 bottom-0 pointer-events-none"
+          className="absolute left-0 top-0 bottom-0 pointer-events-none transition-[width] duration-200"
           style={{
-            width: "0%",
+            width: `${processedPct}%`,
             background: "rgba(234,179,8,0.12)",
           }}
         />

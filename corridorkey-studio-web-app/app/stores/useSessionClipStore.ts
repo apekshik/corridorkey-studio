@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
 
 /**
  * A "session clip" is a clip the user is currently working on but has not
@@ -42,6 +43,11 @@ interface SessionClipStore {
   inPoint: number | null;
   outPoint: number | null;
 
+  // Set when the session clip has been persisted to Convex (via
+  // saveAndDispatchKey on the first KEY press). Lets the viewer / scrubber
+  // subscribe to `frames.listByClip` for keying outputs.
+  savedClipId: Id<"clips"> | null;
+
   // Mutators
   setStage: (stage: SessionStage) => void;
   setProgress: (p: number) => void;
@@ -49,6 +55,8 @@ interface SessionClipStore {
   setMeta: (meta: SessionMeta) => void;
   setCurrentFrame: (f: number) => void;
   setInOut: (inPoint: number | null, outPoint: number | null) => void;
+  setSavedClipId: (id: Id<"clips"> | null) => void;
+  loadFromClip: (clip: Doc<"clips">) => void;
   reset: () => void;
 }
 
@@ -60,6 +68,7 @@ export const useSessionClipStore = create<SessionClipStore>((set) => ({
   currentFrame: 0,
   inPoint: null,
   outPoint: null,
+  savedClipId: null,
 
   setStage: (stage) => set({ stage }),
   setProgress: (progress) => set({ progress }),
@@ -73,9 +82,33 @@ export const useSessionClipStore = create<SessionClipStore>((set) => ({
       outPoint: null,
       errorMessage: null,
       progress: 1,
+      savedClipId: null,
     }),
   setCurrentFrame: (f) => set({ currentFrame: f }),
   setInOut: (inPoint, outPoint) => set({ inPoint, outPoint }),
+  setSavedClipId: (id) => set({ savedClipId: id }),
+  loadFromClip: (clip) =>
+    set({
+      stage: "ready",
+      progress: 1,
+      errorMessage: null,
+      meta: {
+        name: clip.name,
+        sourceUrl: clip.sourceUrl ?? "",
+        thumbnailUrl: clip.thumbnailUrl ?? "",
+        previewFrameUrls: clip.previewFrameUrls ?? [],
+        frameCount: clip.frameCount ?? 0,
+        fps: clip.fps ?? 24,
+        durationS: clip.durationS ?? 0,
+        width: clip.width ?? 0,
+        height: clip.height ?? 0,
+        codec: clip.codec ?? "",
+      },
+      currentFrame: 0,
+      inPoint: null,
+      outPoint: null,
+      savedClipId: clip._id,
+    }),
   reset: () =>
     set({
       stage: "idle",
@@ -85,5 +118,6 @@ export const useSessionClipStore = create<SessionClipStore>((set) => ({
       currentFrame: 0,
       inPoint: null,
       outPoint: null,
+      savedClipId: null,
     }),
 }));

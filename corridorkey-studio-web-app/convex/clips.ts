@@ -2,11 +2,14 @@ import { v } from "convex/values";
 import {
   mutation,
   query,
+  action,
   internalMutation,
+  internalQuery,
   QueryCtx,
   MutationCtx,
 } from "./_generated/server";
-import { Doc } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
+import { api } from "./_generated/api";
 
 /**
  * Clips persist on explicit save. Queries + mutations here are user-scoped —
@@ -246,5 +249,93 @@ export const _markExtractError = internalMutation({
       errorMessage: error,
       updatedAt: Date.now(),
     });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Internal — used by keying action + fal webhook
+// ---------------------------------------------------------------------------
+
+export const _markKeying = internalMutation({
+  args: {
+    clipId: v.id("clips"),
+    falKeyingRequestId: v.string(),
+  },
+  handler: async (ctx, { clipId, falKeyingRequestId }) => {
+    await ctx.db.patch(clipId, {
+      state: "KEYING",
+      falKeyingRequestId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/** Look up a clip by its fal keying request id (used by the fal webhook). */
+export const _findByKeyingRequest = internalQuery({
+  args: { falKeyingRequestId: v.string() },
+  handler: async (ctx, { falKeyingRequestId }) => {
+    return await ctx.db
+      .query("clips")
+      .withIndex("by_fal_keying_request", (q) =>
+        q.eq("falKeyingRequestId", falKeyingRequestId)
+      )
+      .first();
+  },
+});
+
+export const _markKeyingError = internalMutation({
+  args: {
+    clipId: v.id("clips"),
+    error: v.string(),
+  },
+  handler: async (ctx, { clipId, error }) => {
+    await ctx.db.patch(clipId, {
+      state: "ERROR",
+      errorMessage: error,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// saveAndDispatchKey — persist a session clip and immediately kick off keying
+// ---------------------------------------------------------------------------
+
+/**
+ * The keying webhook needs a real `clipId` to attach `frames` rows to, so
+ * the KEY button persists the session clip first, then dispatches. If the
+ * clip is already saved, callers can skip this and call `keying.dispatch`
+ * directly with the existing id.
+ */
+export const saveAndDispatchKey = action({
+  args: {
+    projectId: v.id("projects"),
+    name: v.string(),
+    sourceUrl: v.string(),
+    thumbnailUrl: v.optional(v.string()),
+    previewFrameUrls: v.optional(v.array(v.string())),
+    frameCount: v.optional(v.number()),
+    fps: v.optional(v.number()),
+    durationS: v.optional(v.number()),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    codec: v.optional(v.string()),
+    inPoint: v.optional(v.number()),
+    outPoint: v.optional(v.number()),
+    currentFrame: v.optional(v.number()),
+    scope: v.union(
+      v.literal("ready"),
+      v.literal("selected"),
+      v.literal("all")
+    ),
+  },
+  handler: async (ctx, args): Promise<{ clipId: Id<"clips">; requestId: string }> => {
+    const { scope, ...saveArgs } = args;
+    const clipId: Id<"clips"> = await ctx.runMutation(api.clips.save, saveArgs);
+    const { requestId } = await ctx.runAction(api.keying.dispatch, {
+      clipId,
+      scope,
+    });
+    return { clipId, requestId };
   },
 });
