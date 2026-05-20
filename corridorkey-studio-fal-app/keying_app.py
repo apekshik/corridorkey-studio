@@ -273,9 +273,12 @@ def _post_webhook(url: str, body: dict) -> None:
 # engines can find them without re-resolving the HF cache layout.
 # ---------------------------------------------------------------------------
 
-_CK_WEIGHTS_DIR = FAL_MODEL_WEIGHTS_DIR / "corridorkey"
+# fal.toolkit returns FAL_MODEL_WEIGHTS_DIR as a PurePosixPath (abstract — no
+# filesystem ops). Convert to concrete Path so .exists() / .mkdir() work.
+_FAL_WEIGHTS = Path(str(FAL_MODEL_WEIGHTS_DIR))
+_CK_WEIGHTS_DIR = _FAL_WEIGHTS / "corridorkey"
 _CK_CHECKPOINT = _CK_WEIGHTS_DIR / "CorridorKey_v1.0.pth"
-_GVM_WEIGHTS_DIR = FAL_MODEL_WEIGHTS_DIR / "gvm"
+_GVM_WEIGHTS_DIR = _FAL_WEIGHTS / "gvm"
 
 _CK_HF_REPO = "nikopueringer/CorridorKey_v1.0"
 _CK_HF_FILE = "CorridorKey_v1.0.pth"
