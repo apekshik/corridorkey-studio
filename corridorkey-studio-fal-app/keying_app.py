@@ -458,6 +458,13 @@ class KeyingApp(
             else:
                 mask = np.ones(rgb.shape[:2], dtype=np.float32)
 
+            # Debug: log first-frame shapes so we can diagnose mismatches.
+            if name == "000000":
+                logger.warning(
+                    "DEBUG frame=%s mask=%s mask.dtype=%s hint_existed=%s",
+                    rgb.shape, mask.shape, mask.dtype, hint_img is not None,
+                )
+
             result = self.ck_engine.process_frame(
                 rgb, mask,
                 refiner_scale=settings.refinerScale,
