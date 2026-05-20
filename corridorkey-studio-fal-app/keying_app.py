@@ -338,7 +338,7 @@ class KeyingApp(
     max_multiplexing=1,    # don't share the runner across concurrent requests
 ):
     app_name = "corridorkey-studio-key"
-    machine_type = "GPU-A100"
+    machine_type = "GPU-H100"
     image = _image
 
     def setup(self):
