@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, DragEvent } from "react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Ruler, Upload } from "lucide-react";
 import { useSessionClipStore } from "../stores/useSessionClipStore";
 import { importClip } from "../lib/importClip";
 import { api } from "../../convex/_generated/api";
-import type { Doc } from "../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
 
 type Layer = "alpha" | "fg" | "matte" | "comp" | "processed";
 type ViewMode = "split-h" | "split-v" | "single";
@@ -25,8 +25,9 @@ const LAYERS: { id: Layer; label: string; key: string }[] = [
  * real frame — the OUTPUT layers are placeholders that go live in
  * slice 4 once the keying pipeline writes to `frames`.
  */
-export default function DualViewer() {
+export default function DualViewer({ projectId }: { projectId: Id<"projects"> }) {
   const session = useSessionClipStore();
+  const saveClip = useMutation(api.clips.save);
   const [view, setView] = useState<ViewMode>("split-h");
   const [lastSplit, setLastSplit] = useState<"split-h" | "split-v">("split-h");
   const [layer, setLayer] = useState<Layer>("comp");
@@ -85,8 +86,8 @@ export default function DualViewer() {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file) await importClip(file);
-  }, []);
+    if (file) await importClip(file, (meta) => saveClip({ projectId, ...meta }));
+  }, [projectId, saveClip]);
 
   // Keyboard shortcuts: 1..5 swap layer, F toggles split↔single, S → single.
   useEffect(() => {

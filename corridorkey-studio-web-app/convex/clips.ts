@@ -2,14 +2,12 @@ import { v } from "convex/values";
 import {
   mutation,
   query,
-  action,
   internalMutation,
   internalQuery,
   QueryCtx,
   MutationCtx,
 } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
-import { api } from "./_generated/api";
 
 /**
  * Clips persist on explicit save. Queries + mutations here are user-scoped —
@@ -297,45 +295,3 @@ export const _markKeyingError = internalMutation({
   },
 });
 
-// ---------------------------------------------------------------------------
-// saveAndDispatchKey — persist a session clip and immediately kick off keying
-// ---------------------------------------------------------------------------
-
-/**
- * The keying webhook needs a real `clipId` to attach `frames` rows to, so
- * the KEY button persists the session clip first, then dispatches. If the
- * clip is already saved, callers can skip this and call `keying.dispatch`
- * directly with the existing id.
- */
-export const saveAndDispatchKey = action({
-  args: {
-    projectId: v.id("projects"),
-    name: v.string(),
-    sourceUrl: v.string(),
-    thumbnailUrl: v.optional(v.string()),
-    previewFrameUrls: v.optional(v.array(v.string())),
-    frameCount: v.optional(v.number()),
-    fps: v.optional(v.number()),
-    durationS: v.optional(v.number()),
-    width: v.optional(v.number()),
-    height: v.optional(v.number()),
-    codec: v.optional(v.string()),
-    inPoint: v.optional(v.number()),
-    outPoint: v.optional(v.number()),
-    currentFrame: v.optional(v.number()),
-    scope: v.union(
-      v.literal("ready"),
-      v.literal("selected"),
-      v.literal("all")
-    ),
-  },
-  handler: async (ctx, args): Promise<{ clipId: Id<"clips">; requestId: string }> => {
-    const { scope, ...saveArgs } = args;
-    const clipId: Id<"clips"> = await ctx.runMutation(api.clips.save, saveArgs);
-    const { requestId } = await ctx.runAction(api.keying.dispatch, {
-      clipId,
-      scope,
-    });
-    return { clipId, requestId };
-  },
-});

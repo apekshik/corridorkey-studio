@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { Loader2, Upload, X } from "lucide-react";
 import { useSessionClipStore } from "../stores/useSessionClipStore";
 import { importClip } from "../lib/importClip";
@@ -41,7 +41,11 @@ export default function SidePanel({ projectId }: Props) {
         queueCount={0}
       />
       <div className="overflow-auto">
-        {tab === "media" ? <MediaTab clips={clips} /> : <QueueTab />}
+        {tab === "media" ? (
+          <MediaTab projectId={projectId} clips={clips} />
+        ) : (
+          <QueueTab />
+        )}
       </div>
     </aside>
   );
@@ -122,16 +126,28 @@ function TabButton({
 
 /* ================================= MEDIA ================================ */
 
-function MediaTab({ clips }: { clips: Doc<"clips">[] }) {
+function MediaTab({
+  projectId,
+  clips,
+}: {
+  projectId: Id<"projects">;
+  clips: Doc<"clips">[];
+}) {
   const fileRef = useRef<HTMLInputElement>(null);
   const session = useSessionClipStore();
+  const saveClip = useMutation(api.clips.save);
 
   const handlePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    await importClip(files[0]);
+    await importClip(files[0], (meta) => saveClip({ projectId, ...meta }));
     if (fileRef.current) fileRef.current.value = "";
   };
+
+  // Session row only shows while we're uploading/extracting (or the rare
+  // error case). Once the clip is persisted, the Convex ClipRow takes over.
+  const showSessionRow =
+    session.stage !== "idle" && session.savedClipId === null;
 
   return (
     <div>
@@ -146,7 +162,7 @@ function MediaTab({ clips }: { clips: Doc<"clips">[] }) {
       <MediaToolbar />
 
       <ul className="list-none m-0 p-0">
-        {session.stage !== "idle" && <SessionClipRow />}
+        {showSessionRow && <SessionClipRow />}
         {clips.map((clip) => (
           <ClipRow key={clip._id} clip={clip} />
         ))}
@@ -286,6 +302,28 @@ function ClipRow({ clip }: { clip: Doc<"clips"> }) {
   const activeClipId = useSessionClipStore((s) => s.savedClipId);
   const isActive = activeClipId === clip._id;
 
+  const removeClip = useMutation(api.clips.remove);
+  const cancelKeying = useAction(api.keying.cancel);
+
+  const onDelete = async () => {
+    if (!confirm(`Delete "${clip.name}"? This can't be undone.`)) return;
+    try {
+      // Cancel any in-flight keying job first so fal isn't burning
+      // GPU-minutes on a clip we're about to drop.
+      if (clip.state === "KEYING") {
+        try { await cancelKeying({ clipId: clip._id }); } catch {/* best effort */}
+      }
+      await removeClip({ clipId: clip._id });
+      // If the deleted clip was selected, clear the active selection so the
+      // viewer doesn't keep pointing at a dead row.
+      const s = useSessionClipStore.getState();
+      if (s.savedClipId === clip._id) s.reset();
+    } catch (err) {
+      console.error("delete clip failed", err);
+      alert(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   return (
     <li
       className={`grid gap-2.5 border-b border-[var(--rule)] cursor-pointer relative items-stretch hover:bg-[var(--bg-2)] ${
@@ -333,7 +371,8 @@ function ClipRow({ clip }: { clip: Doc<"clips"> }) {
         stateLabel={stateLabel}
         stateKey={stateKey}
         hint={hint}
-        dismissable={false}
+        dismissable={true}
+        onDismiss={onDelete}
       />
     </li>
   );

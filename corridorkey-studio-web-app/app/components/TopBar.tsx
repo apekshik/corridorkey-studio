@@ -26,7 +26,6 @@ const SCOPES: { id: KeyScope; label: string; sub: string }[] = [
 export default function TopBar({ projectId, project, onSave, onOpenPane }: Props) {
   const clips = useQuery(api.clips.listByProject, { projectId }) ?? [];
   const session = useSessionClipStore();
-  const saveAndDispatchKey = useAction(api.clips.saveAndDispatchKey);
   const dispatchKey = useAction(api.keying.dispatch);
   const cancelKey = useAction(api.keying.cancel);
   const [keyScope, setKeyScope] = useState<KeyScope>("ready");
@@ -69,39 +68,18 @@ export default function TopBar({ projectId, project, onSave, onOpenPane }: Props
   const coverage =
     activeFrameCount > 0 ? { n: keyedCount, m: activeFrameCount } : null;
 
-  const canKey =
-    !keyBusy &&
-    session.stage === "ready" &&
-    session.meta !== null &&
-    !isKeying;
+  // KEY is only available when an active (saved) clip exists. Clips are now
+  // persisted on import, so by the time the user can press KEY, activeClipId
+  // is always set. We no longer save-and-dispatch in one call — that whole
+  // path is gone.
+  const canKey = !keyBusy && activeClipId !== null && !isKeying;
   const canStop = !keyBusy && activeClipId !== null && isKeying;
 
   const onKey = async () => {
-    if (!canKey || !session.meta) return;
+    if (!canKey || !activeClipId) return;
     setKeyBusy(true);
     try {
-      if (activeClipId) {
-        await dispatchKey({ clipId: activeClipId, scope: keyScope });
-      } else {
-        const { clipId } = await saveAndDispatchKey({
-          projectId,
-          name: session.meta.name,
-          sourceUrl: session.meta.sourceUrl,
-          thumbnailUrl: session.meta.thumbnailUrl,
-          previewFrameUrls: session.meta.previewFrameUrls,
-          frameCount: session.meta.frameCount,
-          fps: session.meta.fps,
-          durationS: session.meta.durationS,
-          width: session.meta.width,
-          height: session.meta.height,
-          codec: session.meta.codec,
-          inPoint: session.inPoint ?? undefined,
-          outPoint: session.outPoint ?? undefined,
-          currentFrame: session.currentFrame,
-          scope: keyScope,
-        });
-        session.setSavedClipId(clipId);
-      }
+      await dispatchKey({ clipId: activeClipId, scope: keyScope });
     } catch (err) {
       console.error("KEY dispatch failed:", err);
     } finally {

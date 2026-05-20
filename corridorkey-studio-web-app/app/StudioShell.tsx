@@ -104,7 +104,7 @@ export default function StudioShell({ projectId, workosUser }: StudioShellProps)
       <div className="flex flex-1 min-h-0">
         <SidePanel projectId={projectId} />
         <div className="flex flex-col flex-1 min-w-0">
-          <DualViewer />
+          <DualViewer projectId={projectId} />
           <FrameScrubber />
         </div>
         {settingsOpen && <ParameterPanel />}
