@@ -38,9 +38,11 @@ results flow back via fal webhook to Convex `/fal-webhook/{alpha,key}`.
   UI can stream hints before mattes land
 
 Runs on `GPU-A100` with the real GreenFormer (CorridorKey) and GVM engines.
-The CorridorKey repo is cloned at image build time, pinned to an explicit
-commit SHA (`_CORRIDORKEY_SHA` in `keying_app.py`). Model weights live on
-fal's persistent `/data` volume so cold starts after the first one are fast.
+The CorridorKey repo is cloned at runtime in `setup()` via
+`fal.toolkit.clone_repository`, pinned to `_CORRIDORKEY_SHA`, into the
+persistent `/data` volume. Model weights live in
+`fal.toolkit.FAL_MODEL_WEIGHTS_DIR` (also on `/data`), so cold starts after
+the first one don't re-download.
 
 **Deploy**
 
@@ -74,7 +76,9 @@ fal secrets set FAL_WEBHOOK_SECRET=<the same value>
 **Bumping the CorridorKey revision**
 
 Edit `_CORRIDORKEY_SHA` in `keying_app.py` to the new commit hash and
-redeploy — fal will rebuild the image (the git clone layer invalidates).
+redeploy. The image does **not** rebuild (the clone happens at runtime via
+`clone_repository`), so the redeploy is fast. The next cold start fetches
+the new SHA into `/data`.
 
 ## Why ffmpeg via apt instead of OpenCV's bundled build
 

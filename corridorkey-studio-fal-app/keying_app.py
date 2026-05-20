@@ -38,23 +38,32 @@ from pathlib import Path
 
 import fal
 from fal.container import ContainerImage
-from fal.toolkit import File
+from fal.toolkit import FAL_MODEL_WEIGHTS_DIR, File, clone_repository
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Container image — CUDA + CorridorKey/GVM repo + torch+cu121 + heavy deps
+# Container image — pytorch base + upstream pyproject deps.
+#
+# The CorridorKey monorepo is NOT cloned at build time anymore. It's cloned
+# into fal's persistent /data volume from setup() via clone_repository(),
+# which means bumping _CORRIDORKEY_SHA only requires a code redeploy
+# (seconds), not an image rebuild (~20 min).
 # ---------------------------------------------------------------------------
 
-# Pin the CorridorKey monorepo to an explicit SHA so deploys are reproducible.
-# Bump this when you want a newer model/code revision.
-_CORRIDORKEY_REPO = "https://github.com/apekshik/CorridorKey.git"
+# Pin the CorridorKey monorepo to an explicit SHA for reproducibility.
+# Bump this when you want a newer model/code revision; no image rebuild.
+_CORRIDORKEY_REPO = "https://github.com/apekshik/CorridorKey"
 _CORRIDORKEY_SHA = "cddabf3115ddb7d7db3dc212eea4363d7bacb434"
 
-_dockerfile = f"""
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+# Base image gives us python 3.11 + torch 2.8.0 + cuda 12.1 + cudnn 9 already
+# wired up, so we don't fight version skew between the torch wheel's bundled
+# CUDA runtime and the system CUDA. This is the same pattern fal's own
+# fal-demos/audio/diffrhythm.py uses.
+_dockerfile = """
+FROM pytorch/pytorch:2.8.0-cuda12.1-cudnn9-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \\
     PYTHONDONTWRITEBYTECODE=1 \\
@@ -62,25 +71,15 @@ ENV DEBIAN_FRONTEND=noninteractive \\
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \\
-    python3.11 python3.11-venv python3-pip \\
     ffmpeg \\
     libgl1 libglib2.0-0 \\
-    git curl ca-certificates \\
- && rm -rf /var/lib/apt/lists/* \\
- && ln -sf /usr/bin/python3.11 /usr/local/bin/python \\
- && ln -sf /usr/bin/python3.11 /usr/local/bin/python3
+    git ca-certificates \\
+ && rm -rf /var/lib/apt/lists/*
 
-# Clone the CorridorKey monorepo (contains CorridorKeyModule/ and gvm_core/)
-RUN git clone {_CORRIDORKEY_REPO} /opt/CorridorKey \\
- && cd /opt/CorridorKey && git checkout {_CORRIDORKEY_SHA}
-
-# Torch first (heaviest; pinned). CUDA 12.1 wheels match the base image.
-RUN python -m pip install --upgrade pip \\
- && python -m pip install --index-url https://download.pytorch.org/whl/cu121 \\
-        torch==2.8.0 torchvision==0.23.0
-
-# Upstream pyproject deps minus the mlx/rocm/windows-only extras
-RUN python -m pip install \\
+# Upstream pyproject.toml deps minus the mlx/rocm/windows-only extras.
+# torch + torchvision come from the base image — don't reinstall.
+RUN pip install --upgrade pip \\
+ && pip install \\
         timm==1.0.24 \\
         numpy \\
         opencv-python-headless \\
@@ -102,13 +101,12 @@ RUN python -m pip install \\
         requests
 
 # fal-required packages MUST be installed LAST
-RUN python -m pip install \\
+RUN pip install \\
         boto3==1.35.74 \\
         protobuf==4.25.1 \\
         pydantic==2.10.6
 
 ENV OPENCV_IO_ENABLE_OPENEXR=1 \\
-    PYTHONPATH=/opt/CorridorKey \\
     CORRIDORKEY_SKIP_COMPILE=1 \\
     HF_HUB_ENABLE_HF_TRANSFER=1
 
@@ -267,13 +265,16 @@ def _post_webhook(url: str, body: dict) -> None:
 
 # ---------------------------------------------------------------------------
 # Weights: persistent across cold starts on fal's /data volume.
+#
+# fal automatically sets HF_HOME=/data/.cache/huggingface, so HuggingFace
+# downloads are auto-cached. We additionally pin our weights to predictable
+# paths under FAL_MODEL_WEIGHTS_DIR (= /data/.fal/model-weights) so the
+# engines can find them without re-resolving the HF cache layout.
 # ---------------------------------------------------------------------------
 
-# /data is mounted from a fal persistent volume scoped to the app. First cold
-# start downloads ~80 GB (mostly GVM). Every subsequent cold start is a no-op.
-_WEIGHTS_ROOT = Path("/data/weights")
-_CK_CHECKPOINT = _WEIGHTS_ROOT / "corridorkey" / "CorridorKey_v1.0.pth"
-_GVM_WEIGHTS_DIR = _WEIGHTS_ROOT / "gvm"
+_CK_WEIGHTS_DIR = FAL_MODEL_WEIGHTS_DIR / "corridorkey"
+_CK_CHECKPOINT = _CK_WEIGHTS_DIR / "CorridorKey_v1.0.pth"
+_GVM_WEIGHTS_DIR = FAL_MODEL_WEIGHTS_DIR / "gvm"
 
 _CK_HF_REPO = "nikopueringer/CorridorKey_v1.0"
 _CK_HF_FILE = "CorridorKey_v1.0.pth"
@@ -281,33 +282,31 @@ _GVM_HF_REPO = "geyongtao/gvm"
 
 
 def _ensure_corridorkey_checkpoint() -> Path:
-    """Download the CorridorKey .pth into /data on first cold start; reuse after."""
+    """Download the CorridorKey .pth on first cold start; reuse after."""
     from huggingface_hub import hf_hub_download
 
     if _CK_CHECKPOINT.exists():
         return _CK_CHECKPOINT
-    _CK_CHECKPOINT.parent.mkdir(parents=True, exist_ok=True)
+    _CK_WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
     logger.info("Downloading CorridorKey checkpoint to %s", _CK_CHECKPOINT)
-    path = hf_hub_download(
+    path = Path(hf_hub_download(
         repo_id=_CK_HF_REPO,
         filename=_CK_HF_FILE,
-        local_dir=str(_CK_CHECKPOINT.parent),
-    )
-    # hf_hub_download returns the final path — symlink/rename so we have a
-    # stable location regardless of HF's internal layout
-    final = Path(path)
-    if final != _CK_CHECKPOINT and not _CK_CHECKPOINT.exists():
-        _CK_CHECKPOINT.symlink_to(final)
+        local_dir=str(_CK_WEIGHTS_DIR),
+    ))
+    # hf_hub_download returns the final on-disk path; pin our stable name
+    # to it so downstream code references one canonical path.
+    if path != _CK_CHECKPOINT and not _CK_CHECKPOINT.exists():
+        _CK_CHECKPOINT.symlink_to(path)
     return _CK_CHECKPOINT
 
 
 def _ensure_gvm_weights() -> Path:
-    """Download the GVM HF tree (~80 GB) into /data on first cold start."""
+    """Download the GVM HF tree (~80 GB) on first cold start; reuse after."""
     from huggingface_hub import snapshot_download
 
-    # snapshot_download checks file digests, so it's safe to call every time —
-    # but skip the call entirely if we've already populated the dir to avoid
-    # an unnecessary network roundtrip on every cold start.
+    # snapshot_download verifies digests every call, which is slow for an
+    # 80 GB tree. Skip entirely once a marker file confirms completion.
     marker = _GVM_WEIGHTS_DIR / ".fal_complete"
     if marker.exists():
         return _GVM_WEIGHTS_DIR
@@ -319,7 +318,11 @@ def _ensure_gvm_weights() -> Path:
         local_dir=str(_GVM_WEIGHTS_DIR),
         max_workers=8,
     )
-    marker.touch()
+    # Atomic completion marker — write+rename so a partial download never
+    # gets recognised as complete.
+    tmp = _GVM_WEIGHTS_DIR / ".fal_complete.partial"
+    tmp.touch()
+    tmp.rename(marker)
     return _GVM_WEIGHTS_DIR
 
 
@@ -327,7 +330,12 @@ def _ensure_gvm_weights() -> Path:
 # fal App — engines load once in setup(); endpoints run inference per request.
 # ---------------------------------------------------------------------------
 
-class KeyingApp(fal.App, keep_alive=600):
+class KeyingApp(
+    fal.App,
+    keep_alive=600,
+    max_concurrency=1,     # one job per runner; CK + GVM together hog the GPU
+    max_multiplexing=1,    # don't share the runner across concurrent requests
+):
     app_name = "corridorkey-studio-key"
     machine_type = "GPU-A100"
     image = _image
@@ -339,13 +347,25 @@ class KeyingApp(fal.App, keep_alive=600):
         except Exception as e:
             raise RuntimeError(f"ffmpeg binary not available in container: {e}")
 
-        # 2. Make weights available on /data (one-time cost on the very first
-        # cold start; idempotent on every subsequent one).
+        # 2. Clone the CorridorKey monorepo into /data, pinned to a SHA.
+        # `include_to_path=True` puts the clone on sys.path so the
+        # CorridorKeyModule + gvm_core packages import directly. Re-running
+        # with the same SHA is a no-op (already on /data).
+        repo_path = clone_repository(
+            _CORRIDORKEY_REPO,
+            commit_hash=_CORRIDORKEY_SHA,
+            include_to_path=True,
+        )
+        logger.info("CorridorKey repo ready at %s", repo_path)
+
+        # 3. Make weights available on /data (one-time cost on the very
+        # first cold start; idempotent on every subsequent one).
         ck_ckpt = _ensure_corridorkey_checkpoint()
         gvm_dir = _ensure_gvm_weights()
 
-        # 3. Build engines on CUDA. Imports are deferred to setup() so module
-        # import doesn't pay torch's startup cost during container probes.
+        # 4. Build engines on CUDA. Imports are deferred to setup() so module
+        # import doesn't pay torch's startup cost during container probes,
+        # and so they happen *after* the repo is on sys.path.
         import torch
         from CorridorKeyModule.inference_engine import CorridorKeyEngine
         from gvm_core.wrapper import GVMProcessor
