@@ -56,18 +56,19 @@ export interface InferenceParams {
   autoDespeckle: boolean;
   despeckleSize: number;
   refinerScale: number;
-  livePreview: boolean;
 }
 
 export interface OutputConfig {
   fgEnabled: boolean;
   fgFormat: "exr" | "png";
+  fgPremult: "premult" | "straight";
   matteEnabled: boolean;
   matteFormat: "exr" | "png";
   compEnabled: boolean;
   compFormat: "exr" | "png";
   processedEnabled: boolean;
   processedFormat: "exr" | "png";
+  generateCompPreview: boolean;
 }
 
 export interface GPUJob {
@@ -101,16 +102,17 @@ export const DEFAULT_INFERENCE_PARAMS: InferenceParams = {
   autoDespeckle: true,
   despeckleSize: 400,
   refinerScale: 1.0,
-  livePreview: false,
 };
 
 export const DEFAULT_OUTPUT_CONFIG: OutputConfig = {
   fgEnabled: true,
   fgFormat: "exr",
+  fgPremult: "premult",
   matteEnabled: true,
   matteFormat: "exr",
-  compEnabled: true,
+  compEnabled: false,
   compFormat: "png",
   processedEnabled: true,
   processedFormat: "exr",
+  generateCompPreview: true,
 };

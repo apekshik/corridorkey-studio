@@ -1,515 +1,417 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Settings, Play, Square, ChevronDown, Info, X, AlertTriangle } from "lucide-react";
-import { useSettingsStore } from "../stores/useSettingsStore";
-import { useClipStore } from "../stores/useClipStore";
-import { useQueueStore } from "../stores/useQueueStore";
-import { JobType, JobStatus, ClipState } from "../lib/types";
-import { createJob, cancelJob } from "../lib/api";
+import { useEffect, useRef, useState } from "react";
+import { useAction, useQuery } from "convex/react";
+import { ChevronDown, Download, Settings } from "lucide-react";
 import UserMenu from "./UserMenu";
+import { useDirtyStore } from "../stores/useDirtyStore";
+import { useSessionClipStore } from "../stores/useSessionClipStore";
+import { api } from "../../convex/_generated/api";
+import { Doc, Id } from "../../convex/_generated/dataModel";
 
-const KEY_MODES = [
-  {
-    id: "selected",
-    label: "KEY SELECTED",
-    subtitle: "Key the currently selected clip",
-  },
-  {
-    id: "all-ready",
-    label: "KEY ALL READY",
-    subtitle: "Key all clips with alpha hints",
-  },
-  {
-    id: "all-pipeline",
-    label: "KEY ALL",
-    subtitle: "Generate alpha + key for all pending clips",
-  },
-] as const;
+interface Props {
+  projectId: Id<"projects">;
+  project: Doc<"projects"> | null | undefined;
+  onSave: () => void;
+  onOpenPane: () => void;
+}
 
-export default function TopBar() {
-  const connected = useSettingsStore((s) => s.connectionStatus) === "connected";
-  const clips = useClipStore((s) => s.clips);
-  const selectedId = useClipStore((s) => s.selectedClipId);
-  const addJob = useQueueStore((s) => s.addJob);
-  const [keyModeIndex, setKeyModeIndex] = useState(0);
-  const [keyDropOpen, setKeyDropOpen] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
-  const [partialHintModal, setPartialHintModal] = useState(false);
-  const dropRef = useRef<HTMLDivElement>(null);
-  const coverage = useClipStore((s) => s.coverage);
+type KeyScope = "selected" | "ready" | "all";
+const SCOPES: { id: KeyScope; label: string; sub: string }[] = [
+  { id: "selected", label: "Key Selected", sub: "Run only the highlighted clip" },
+  { id: "ready", label: "Key All-Ready", sub: "Run every clip with hints present" },
+  { id: "all", label: "Key Everything", sub: "Auto-generate hints for clips that need them" },
+];
 
-  const selectedClip = clips.find((c) => c.id === selectedId);
-  const selectedIsReady = selectedClip?.state === ClipState.READY;
-  const hasPartialHints = selectedIsReady && selectedClip &&
-    coverage.alphaHints.length > 0 &&
-    coverage.alphaHints.length < selectedClip.frameCount;
-  const readyClips = clips.filter((c) => c.state === ClipState.READY);
+export default function TopBar({ projectId, project, onSave, onOpenPane }: Props) {
+  const clips = useQuery(api.clips.listByProject, { projectId }) ?? [];
+  const session = useSessionClipStore();
+  const dispatchKey = useAction(api.keying.dispatch);
+  const cancelKey = useAction(api.keying.cancel);
+  const [keyScope, setKeyScope] = useState<KeyScope>("ready");
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const [keyBusy, setKeyBusy] = useState(false);
+  const keyGroupRef = useRef<HTMLDivElement>(null);
 
-  const hasNoHints = selectedClip && coverage.alphaHints.length === 0;
-  const canKey = connected;
-
-  const executeKey = async () => {
-    if (!canKey) return;
-    const mode = KEY_MODES[keyModeIndex].id;
-    let targets: string[] = [];
-
-    if (mode === "selected" && selectedId && selectedIsReady) {
-      targets = [selectedId];
-    } else if (mode === "all-ready") {
-      targets = readyClips.map((c) => c.id);
-    } else if (mode === "all-pipeline") {
-      // For "KEY ALL": run GVM on RAW clips first, then key all READY
-      const rawClips = clips.filter((c) => c.state === ClipState.RAW);
-      for (const clip of rawClips) {
-        try {
-          const gvmJob = await createJob(clip.id, JobType.GVM_ALPHA);
-          addJob(gvmJob);
-        } catch (err) {
-          console.error("Failed to create GVM job:", err);
-        }
-      }
-      targets = readyClips.map((c) => c.id);
-    }
-
-    for (const clipId of targets) {
-      try {
-        const job = await createJob(clipId, JobType.INFERENCE);
-        addJob(job);
-        // Open queue panel
-        const qs = useQueueStore.getState();
-        if (!qs.isOpen) qs.toggleQueue();
-      } catch (err) {
-        console.error("Failed to create key job:", err);
-      }
-    }
-  };
-
-  const [noHintModal, setNoHintModal] = useState(false);
-
-  const handleKey = () => {
-    if (!canKey) return;
-    if (keyModeIndex === 0 && selectedClip) {
-      if (hasNoHints) {
-        setNoHintModal(true);
-        return;
-      }
-      if (hasPartialHints) {
-        setPartialHintModal(true);
-        return;
-      }
-    }
-    executeKey();
-  };
-
-  // Close dropdown on outside click
   useEffect(() => {
-    if (!keyDropOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
-        setKeyDropOpen(false);
+    if (!scopeOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (keyGroupRef.current && !keyGroupRef.current.contains(e.target as Node)) {
+        setScopeOpen(false);
       }
     };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [keyDropOpen]);
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [scopeOpen]);
+
+  const clipCount = clips.length;
+  const totalSeconds = clips.reduce((s, c) => s + (c.durationS ?? 0), 0);
+
+  const scopeCount = scopeCountFor(keyScope, clips);
+  const currentScope = SCOPES.find((s) => s.id === keyScope)!;
+
+  // Resolve the "active" clip: the in-session one if it's been saved, falling
+  // back to the most recent project clip. Frames coverage + KEY/STOP wiring
+  // hang off this id.
+  const savedClip = session.savedClipId
+    ? clips.find((c) => c._id === session.savedClipId) ?? null
+    : null;
+  const activeClipId: Id<"clips"> | null = savedClip?._id ?? null;
+  const activeFrameCount = savedClip?.frameCount ?? session.meta?.frameCount ?? 0;
+  const isKeying = savedClip?.state === "KEYING";
+
+  const frames = useQuery(
+    api.frames.listByClip,
+    activeClipId ? { clipId: activeClipId } : "skip"
+  );
+  const keyedCount = frames?.filter((f) => f.processedUrl || f.matteUrl).length ?? 0;
+  const coverage =
+    activeFrameCount > 0 ? { n: keyedCount, m: activeFrameCount } : null;
+
+  // KEY is only available when an active (saved) clip exists. Clips are now
+  // persisted on import, so by the time the user can press KEY, activeClipId
+  // is always set. We no longer save-and-dispatch in one call — that whole
+  // path is gone.
+  const canKey = !keyBusy && activeClipId !== null && !isKeying;
+  const canStop = !keyBusy && activeClipId !== null && isKeying;
+
+  const onKey = async () => {
+    if (!canKey || !activeClipId) return;
+    setKeyBusy(true);
+    try {
+      await dispatchKey({ clipId: activeClipId, scope: keyScope });
+    } catch (err) {
+      console.error("KEY dispatch failed:", err);
+    } finally {
+      setKeyBusy(false);
+    }
+  };
+
+  const onStop = async () => {
+    if (!canStop || !activeClipId) return;
+    setKeyBusy(true);
+    try {
+      await cancelKey({ clipId: activeClipId });
+    } catch (err) {
+      console.error("STOP failed:", err);
+    } finally {
+      setKeyBusy(false);
+    }
+  };
 
   return (
-    <>
-      <div className="h-10 flex items-center justify-between px-4 border-b border-[var(--border)] bg-[var(--surface)] shrink-0 select-none">
-        {/* Brand + info */}
-        <div className="flex items-center gap-2">
-          <span className="text-[var(--text-bright)] text-xs font-bold tracking-[0.2em] uppercase">
-            CORRIDORKEY STUDIO
-          </span>
-          <button
-            onClick={() => setInfoOpen(true)}
-            className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer transition-colors"
-            title="About CorridorKey"
+    <header
+      className="grid items-stretch border-b border-[var(--rule-strong)] bg-[var(--bg-1)] min-w-0 select-none"
+      style={{
+        gridTemplateColumns: "var(--rail-w) minmax(0, 1fr) auto",
+        height: "var(--topbar-h)",
+      }}
+    >
+      {/* Brand */}
+      <div
+        className="flex items-center gap-3 border-r border-[var(--rule-strong)] min-w-0"
+        style={{ padding: "0 var(--pad)" }}
+      >
+        <BrandMark />
+        <div className="flex flex-col leading-none gap-1 min-w-0">
+          <span
+            className="text-[22px] italic text-[var(--ink-0)] leading-none tracking-[-0.01em] whitespace-nowrap"
+            style={{ fontFamily: "var(--serif)" }}
           >
-            <Info size={13} />
+            Corridorkey
+          </span>
+          <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--ink-2)] pt-0.5">
+            Studio · v0.14
+          </span>
+        </div>
+      </div>
+
+      {/* Project + meta + coverage */}
+      <div
+        className="flex items-center gap-2.5 min-w-0 overflow-hidden"
+        style={{ padding: "0 var(--pad)" }}
+      >
+        <div className="flex items-center gap-3.5 pr-3 border-r border-[var(--rule)] h-[60%] min-w-0">
+          <button
+            onClick={onOpenPane}
+            title="Open projects pane (⌘O)"
+            className="flex flex-col gap-[3px] leading-none min-w-0 text-left"
+          >
+            <span className="text-[9.5px] uppercase tracking-[0.22em] text-[var(--ink-2)] whitespace-nowrap">
+              Project <span className="text-[var(--ink-3)] tracking-normal">/</span>
+            </span>
+            <span
+              className="text-[20px] italic leading-none truncate max-w-[260px] text-[var(--ink-0)] hover:text-[var(--accent)] transition-colors"
+              style={{ fontFamily: "var(--serif)" }}
+            >
+              {project?.name ?? "…"}
+            </span>
           </button>
+          <div className="text-[11px] text-[var(--ink-2)] whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-2">
+            <span className="tabular-nums">
+              {String(clipCount).padStart(2, "0")} clips
+            </span>
+            <span className="text-[var(--ink-4)]">·</span>
+            <span className="tabular-nums">{formatHMS(totalSeconds)} total</span>
+            <span className="text-[var(--ink-4)]">·</span>
+            <SaveState onSave={onSave} />
+          </div>
         </div>
 
-        {/* Actions + settings */}
-        <div className="flex items-center gap-2">
-          {/* KEY button with dropdown */}
-          <div className="relative" ref={dropRef}>
-            <div className="flex">
-              <button
-                onClick={handleKey}
-                disabled={!canKey}
-                title={!connected ? "Connect to server first" : ""}
-                className={`flex items-center gap-1.5 px-3 py-1 text-[10px] uppercase tracking-wider font-bold transition-colors ${
-                  canKey
-                    ? "bg-[var(--accent)] text-[var(--text-bright)] cursor-pointer hover:bg-[var(--accent-dim)]"
-                    : "bg-[var(--surface-2)] text-[var(--text-muted)] cursor-not-allowed opacity-50"
-                }`}
-              >
-                <Play size={10} fill="currentColor" />
-                {KEY_MODES[keyModeIndex].label}
-              </button>
-              <button
-                onClick={() => setKeyDropOpen(!keyDropOpen)}
-                className="px-1.5 py-1 bg-[var(--accent)] text-[var(--text-bright)] cursor-pointer hover:bg-[var(--accent-dim)] transition-colors border-l border-[rgba(255,255,255,0.2)]"
-              >
-                <ChevronDown size={10} />
-              </button>
-            </div>
-
-            {keyDropOpen && (
-              <div
-                className="absolute right-0 top-full mt-1 w-64 bg-[var(--surface)] border border-[var(--border)] z-50"
-              >
-                {KEY_MODES.map((mode, i) => (
-                  <button
-                    key={mode.id}
-                    onClick={() => {
-                      setKeyModeIndex(i);
-                      setKeyDropOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 cursor-pointer transition-colors border-b border-[var(--border)] last:border-b-0 ${
-                      i === keyModeIndex
-                        ? "bg-[var(--surface-2)]"
-                        : "hover:bg-[var(--surface-2)]"
-                    }`}
-                  >
-                    <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text)]">
-                      {mode.label}
-                    </div>
-                    <div className="text-[9px] text-[var(--text-muted)] mt-0.5">
-                      {mode.subtitle}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={async () => {
-              const jobs = useQueueStore.getState().jobs;
-              const running = jobs.filter((j) => j.status === "RUNNING" || j.status === "QUEUED");
-              for (const job of running) {
-                try {
-                  await cancelJob(job.id);
-                  useQueueStore.getState().updateJobStatus(job.id, JobStatus.CANCELLED);
-                } catch (err) {
-                  console.error("Failed to cancel job:", err);
-                }
-              }
+        {coverage && (
+          <div
+            className="flex items-center gap-2 border border-[var(--rule-strong)] text-[10px] uppercase tracking-[0.16em] px-2.5 whitespace-nowrap"
+            style={{
+              height: "calc(var(--topbar-h) - 16px)",
+              color: coverage.n === coverage.m ? "var(--ok)" : "var(--warn)",
+              background:
+                coverage.n === coverage.m
+                  ? "rgba(134,239,172,0.06)"
+                  : "rgba(251,191,36,0.06)",
+              borderColor:
+                coverage.n === coverage.m ? "#1f3b2a" : "#4a3b14",
             }}
-            className="flex items-center gap-1.5 px-3 py-1 border border-[var(--border)] text-[10px] uppercase tracking-wider cursor-pointer hover:border-[var(--text-muted)] hover:text-[var(--error)] transition-colors"
+            title="Keyed-frame coverage for the selected clip"
           >
-            <Square size={10} />
-            STOP
+            <span
+              className="w-[6px] h-[6px]"
+              style={{
+                background:
+                  coverage.n === coverage.m ? "var(--ok)" : "var(--warn)",
+              }}
+            />
+            Keyed {String(coverage.n).padStart(2, "0")} / {coverage.m}
+          </div>
+        )}
+      </div>
+
+      {/* Right actions */}
+      <div className="flex items-stretch border-l border-[var(--rule-strong)] shrink-0">
+        <button
+          disabled={!canStop}
+          onClick={onStop}
+          title={canStop ? "Stop keying job" : "No active keying job"}
+          className={`flex items-center gap-2 px-3 my-2 mr-1.5 ml-1 border border-[var(--rule-strong)] text-[10.5px] uppercase tracking-[0.2em] whitespace-nowrap ${
+            canStop
+              ? "text-[var(--ink-0)] hover:bg-[var(--bg-2)]"
+              : "text-[var(--ink-2)] opacity-50 cursor-not-allowed"
+          }`}
+          style={{ height: "calc(var(--topbar-h) - 16px)" }}
+        >
+          <span
+            className="w-[8px] h-[8px]"
+            style={{ background: "var(--err)" }}
+          />
+          Stop
+        </button>
+
+        <div
+          ref={keyGroupRef}
+          role="group"
+          aria-label="Key action"
+          className="relative flex items-stretch my-2 ml-auto border text-[12px] font-bold uppercase tracking-[0.2em]"
+          style={{
+            height: "calc(var(--topbar-h) - 16px)",
+            background: "var(--accent)",
+            color: "var(--accent-ink)",
+            borderColor: "var(--accent)",
+          }}
+        >
+          <button
+            disabled={!canKey}
+            onClick={onKey}
+            title={
+              isKeying
+                ? "Keying in progress"
+                : canKey
+                ? `Run keying (${currentScope.label})`
+                : "Load a clip first"
+            }
+            className={`flex items-center gap-2.5 px-3.5 border-r border-black/25 ${
+              canKey ? "hover:brightness-110" : "cursor-not-allowed opacity-60"
+            }`}
+          >
+            {keyBusy ? "Dispatching…" : "Key"}
+            <span className="text-[10px] font-medium opacity-70 tracking-[0.14em]">
+              {currentScope.label.replace(/^Key /, "").toUpperCase()} ·{" "}
+              {String(scopeCount).padStart(2, "0")}
+            </span>
           </button>
-
-          <button className="p-1 text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer transition-colors">
-            <Settings size={14} />
+          <button
+            onClick={() => setScopeOpen((o) => !o)}
+            aria-haspopup="menu"
+            className="flex items-center gap-1.5 px-2.5 text-[10.5px] tracking-[0.14em]"
+          >
+            Scope <ChevronDown size={10} />
           </button>
+          {scopeOpen && (
+            <div
+              role="menu"
+              className="absolute top-[calc(100%+1px)] right-0 min-w-[260px] bg-[var(--bg-2)] border border-[var(--rule-strong)] text-[var(--ink-0)] z-[20]"
+            >
+              {SCOPES.map((s) => (
+                <button
+                  key={s.id}
+                  role="menuitem"
+                  onClick={() => {
+                    setKeyScope(s.id);
+                    setScopeOpen(false);
+                  }}
+                  className={`grid grid-cols-[1fr_auto] gap-3 w-full text-left px-3 py-2.5 border-b border-[var(--rule)] last:border-b-0 ${
+                    s.id === keyScope
+                      ? "bg-[var(--bg-3)]"
+                      : "hover:bg-[var(--bg-3)]"
+                  }`}
+                >
+                  <div>
+                    <div
+                      className={`uppercase tracking-[0.16em] text-[10.5px] ${
+                        s.id === keyScope
+                          ? "text-[var(--accent)]"
+                          : "text-[var(--ink-0)]"
+                      }`}
+                    >
+                      {s.label}
+                    </div>
+                    <div className="text-[10px] text-[var(--ink-2)] mt-0.5 tracking-normal normal-case">
+                      {s.sub}
+                    </div>
+                  </div>
+                  <span className="text-[10.5px] text-[var(--ink-2)] self-start">
+                    {String(scopeCountFor(s.id, clips)).padStart(2, "0")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-          <div className="w-px h-4 bg-[var(--border)]" />
-
+        <IconButton title="Export config">
+          <Download size={16} />
+        </IconButton>
+        <IconButton title="Settings">
+          <Settings size={16} />
+        </IconButton>
+        <div className="flex items-center gap-2 px-2.5 border-l border-[var(--rule)] h-full whitespace-nowrap shrink-0">
           <UserMenu />
         </div>
       </div>
-
-      {/* Info overlay */}
-      {infoOpen && <InfoOverlay onClose={() => setInfoOpen(false)} />}
-      {noHintModal && selectedClip && (
-        <NoHintModal
-          clipName={selectedClip.name}
-          onGenerate={async () => {
-            setNoHintModal(false);
-            try {
-              const job = await createJob(selectedClip.id, JobType.GVM_ALPHA);
-              addJob(job);
-              // Open queue panel so user sees progress
-              const qs = useQueueStore.getState();
-              if (!qs.isOpen) qs.toggleQueue();
-            } catch (err) {
-              console.error("Failed to create GVM job:", err);
-            }
-          }}
-          onClose={() => setNoHintModal(false)}
-        />
-      )}
-      {partialHintModal && selectedClip && (
-        <PartialHintModal
-          hintCount={coverage.alphaHints.length}
-          totalFrames={selectedClip.frameCount}
-          onContinue={() => {
-            setPartialHintModal(false);
-            executeKey();
-          }}
-          onGenerate={async () => {
-            setPartialHintModal(false);
-            try {
-              const job = await createJob(selectedClip.id, JobType.GVM_ALPHA);
-              addJob(job);
-              const qs = useQueueStore.getState();
-              if (!qs.isOpen) qs.toggleQueue();
-            } catch (err) {
-              console.error("Failed to create GVM job:", err);
-            }
-          }}
-          onClose={() => setPartialHintModal(false)}
-        />
-      )}
-    </>
+    </header>
   );
 }
 
-function NoHintModal({
-  clipName,
-  onGenerate,
-  onClose,
+/* ----------------------------- subcomponents ---------------------------- */
+
+function BrandMark() {
+  return (
+    <div
+      aria-hidden
+      className="relative grid place-items-center border border-[var(--ink-0)]"
+      style={{ width: 26, height: 26 }}
+    >
+      <span
+        className="absolute border border-[var(--ink-2)]"
+        style={{ inset: 3 }}
+      />
+      <span
+        className="absolute"
+        style={{
+          width: 6,
+          height: 6,
+          top: 2,
+          right: 2,
+          background: "var(--accent)",
+        }}
+      />
+    </div>
+  );
+}
+
+function IconButton({
+  title,
+  children,
+  onClick,
 }: {
-  clipName: string;
-  onGenerate: () => void;
-  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+  onClick?: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={onClose}
+    <button
+      onClick={onClick}
+      title={title}
+      className="grid place-items-center border-l border-[var(--rule)] text-[var(--ink-1)] hover:bg-[var(--bg-2)] hover:text-[var(--ink-0)] shrink-0"
+      style={{ width: 40, height: "var(--topbar-h)" }}
     >
-      <div
-        className="w-[400px] bg-[var(--surface)] border border-[var(--border)] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-[var(--border)]">
-          <AlertTriangle size={16} className="text-[var(--warning)]" />
-          <span className="text-sm font-bold tracking-[0.1em] uppercase text-[var(--text-bright)]">
-            NO ALPHA HINTS
-          </span>
-        </div>
-        <div className="px-5 py-4 text-[11px] text-[var(--text-muted)] leading-relaxed">
-          <p className="mb-4">
-            <span className="text-[var(--text-bright)]">{clipName}</span>{" "}doesn&apos;t have
-            alpha hints yet. CorridorKey needs alpha hints to know where the foreground is
-            before it can generate a clean key.
-          </p>
-          <button
-            onClick={onGenerate}
-            className="w-full py-2 bg-[var(--accent)] text-[10px] uppercase tracking-wider font-bold text-white cursor-pointer hover:bg-[var(--accent-dim)] transition-colors"
-          >
-            GENERATE ALPHA HINTS
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PartialHintModal({
-  hintCount,
-  totalFrames,
-  onContinue,
-  onGenerate,
-  onClose,
-}: {
-  hintCount: number;
-  totalFrames: number;
-  onContinue: () => void;
-  onGenerate: () => void;
-  onClose: () => void;
-}) {
-  const pct = Math.round((hintCount / totalFrames) * 100);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={onClose}
-    >
-      <div
-        className="w-[400px] bg-[var(--surface)] border border-[var(--border)] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-[var(--border)]">
-          <AlertTriangle size={16} className="text-[var(--warning)]" />
-          <span className="text-sm font-bold tracking-[0.1em] uppercase text-[var(--text-bright)]">
-            PARTIAL ALPHA HINTS
-          </span>
-        </div>
-        <div className="px-5 py-4 text-[11px] text-[var(--text-muted)] leading-relaxed">
-          <p className="mb-3">
-            Only <span className="text-[var(--text-bright)] font-bold">{hintCount}/{totalFrames}</span> frames
-            ({pct}%) have alpha hints. Keying now will only process frames with hints — the rest will be skipped.
-          </p>
-          <div className="w-full h-1.5 bg-[#222] mb-4">
-            <div className="h-full bg-[var(--warning)]" style={{ width: `${pct}%` }} />
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={onGenerate}
-              className="flex-1 py-2 border border-[var(--border)] text-[10px] uppercase tracking-wider font-bold text-[var(--text)] cursor-pointer hover:bg-[var(--surface-2)] transition-colors"
-            >
-              GENERATE REMAINING
-            </button>
-            <button
-              onClick={onContinue}
-              className="flex-1 py-2 bg-[var(--accent)] text-[10px] uppercase tracking-wider font-bold text-white cursor-pointer hover:bg-[var(--accent-dim)] transition-colors"
-            >
-              KEY ANYWAY
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InfoOverlay({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      onClick={onClose}
-    >
-      <div
-        className="w-[560px] max-h-[80vh] bg-[var(--surface)] border border-[var(--border)] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Sticky header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--surface)] sticky top-0 z-10 shrink-0">
-          <span className="text-sm font-bold tracking-[0.15em] uppercase text-[var(--text-bright)]">
-            ABOUT CORRIDORKEY
-          </span>
-          <button
-            onClick={onClose}
-            className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Scrollable content */}
-        <div className="px-6 py-5 text-[11px] leading-relaxed text-[var(--text)] flex flex-col gap-5 overflow-y-auto">
-          <Section title="WHAT IS KEYING?">
-            Green screen keying is the process of separating a subject (person,
-            object) from a green screen background. The result is an{" "}
-            <strong className="text-[var(--text-bright)]">alpha matte</strong> — a
-            black-and-white image where white is foreground and black is background.
-            With the matte, you can composite the subject onto any background.
-          </Section>
-
-          <Section title="HOW CORRIDORKEY WORKS">
-            CorridorKey uses a neural network to produce production-quality mattes
-            with clean hair detail, motion blur, and translucency. It requires an{" "}
-            <strong className="text-[var(--text-bright)]">alpha hint</strong> — a
-            rough guess of where the foreground is — which it refines into a precise
-            cutout. Think of it as: you give the AI a rough outline, it gives you
-            back a perfect key.
-          </Section>
-
-          <Section title="ALPHA HINTS">
-            <p className="mb-2">
-              Before keying, each clip needs an alpha hint. There are two ways to
-              generate one:
-            </p>
-            <div className="flex flex-col gap-2 pl-3 border-l border-[var(--border)]">
-              <div>
-                <strong className="text-[var(--text-bright)]">GVM AUTO</strong>
-                <span className="text-[var(--text-muted)]"> — </span>
-                One-click automatic segmentation. A separate model detects the
-                foreground and generates the hint. Best for standard green screen
-                shots with clear separation.
-              </div>
-              <div>
-                <strong className="text-[var(--text-bright)]">VIDEOMAMA</strong>
-                <span className="text-[var(--text-muted)]"> — </span>
-                Artist-guided masking. You paint foreground (green) and background
-                (red) brush strokes on a few keyframes, and VideoMaMa interpolates
-                between them. More work, but much better for tricky shots.
-              </div>
-            </div>
-          </Section>
-
-          <Section title="THE PIPELINE">
-            <div className="flex flex-col gap-1 text-[10px] font-bold tracking-wider uppercase">
-              <Step num="1" text="Import video" desc="Drag files or click Import" />
-              <Step num="2" text="Generate alpha hint" desc="GVM Auto or VideoMaMa" />
-              <Step num="3" text="Key the clip" desc="CorridorKey refines the hint into a production matte" />
-              <Step num="4" text="Export outputs" desc="FG, Matte, Comp, Processed — EXR or PNG" />
-            </div>
-          </Section>
-
-          <Section title="CLIP STATES">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
-              <StateRow color="#f97316" label="EXTRACTING" desc="Video being decoded" />
-              <StateRow color="#888" label="RAW" desc="Frames loaded, no alpha" />
-              <StateRow color="#3b82f6" label="MASKED" desc="Annotations painted" />
-              <StateRow color="#eab308" label="READY" desc="Alpha hint available" />
-              <StateRow color="#22c55e" label="COMPLETE" desc="Keying done" />
-              <StateRow color="#ef4444" label="ERROR" desc="Processing failed" />
-            </div>
-          </Section>
-
-          <Section title="KEYBOARD SHORTCUTS">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px]">
-              <Shortcut keys="Q" desc="Toggle media/queue panel" />
-              <Shortcut keys="Space" desc="Play / pause" />
-              <Shortcut keys="I" desc="Set in-point" />
-              <Shortcut keys="O" desc="Set out-point" />
-              <Shortcut keys="1" desc="Foreground brush" />
-              <Shortcut keys="2" desc="Background brush" />
-            </div>
-          </Section>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-[9px] uppercase tracking-[0.15em] text-[var(--text-muted)] font-bold mb-1.5">
-        {title}
-      </div>
       {children}
-    </div>
+    </button>
   );
 }
 
-function Step({ num, text, desc }: { num: string; text: string; desc: string }) {
-  return (
-    <div className="flex items-baseline gap-2 py-1">
-      <span className="text-[var(--accent)] w-4">{num}.</span>
-      <span className="text-[var(--text-bright)]">{text}</span>
-      <span className="text-[var(--text-muted)] font-normal text-[9px] normal-case tracking-normal">
-        — {desc}
+function SaveState({ onSave }: { onSave: () => void }) {
+  const dirty = useDirtyStore((s) => s.dirty);
+  const lastSavedAt = useDirtyStore((s) => s.lastSavedAt);
+
+  if (dirty) {
+    return (
+      <span className="inline-flex items-center gap-1.5 tabular-nums">
+        <span className="inline-flex items-center gap-1.5 text-[var(--warn)]">
+          <span
+            className="inline-block w-[5px] h-[5px] rounded-full"
+            style={{ background: "var(--warn)" }}
+          />
+          unsaved
+        </span>
+        <button
+          onClick={onSave}
+          className="ml-1 inline-flex items-center gap-1.5 px-2 py-[3px] text-[9.5px] uppercase tracking-[0.18em] font-semibold"
+          style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
+          title="Save (⌘S)"
+        >
+          Save
+          <span
+            className="text-[9px] tracking-[0.04em] border px-1 py-0 leading-[1.3]"
+            style={{
+              borderColor: "rgba(10,8,6,0.25)",
+              color: "var(--accent-ink)",
+              opacity: 0.55,
+            }}
+          >
+            ⌘S
+          </span>
+        </button>
       </span>
-    </div>
-  );
-}
+    );
+  }
 
-function StateRow({ color, label, desc }: { color: string; label: string; desc: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-2 h-2 shrink-0" style={{ background: color }} />
-      <span className="text-[var(--text)] uppercase tracking-wider">{label}</span>
-      <span className="text-[var(--text-muted)]">— {desc}</span>
-    </div>
-  );
-}
-
-function Shortcut({ keys, desc }: { keys: string; desc: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[var(--text-bright)] bg-[var(--surface-2)] border border-[var(--border)] px-1.5 py-0.5 text-[9px] font-bold min-w-6 text-center">
-        {keys}
+    <span className="inline-flex items-center gap-1.5 tabular-nums">
+      <span className="text-[var(--ink-2)]">
+        saved {lastSavedAt ? formatHM(lastSavedAt) : "—:—"}
       </span>
-      <span className="text-[var(--text-muted)]">{desc}</span>
-    </div>
+    </span>
   );
+}
+
+function formatHM(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/* ------------------------------- helpers -------------------------------- */
+
+function formatHMS(seconds: number): string {
+  if (!seconds || !isFinite(seconds)) return "00:00:00";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(
+    s
+  ).padStart(2, "0")}`;
+}
+
+function scopeCountFor(scope: KeyScope, clips: Doc<"clips">[]): number {
+  if (scope === "selected") return clips.length > 0 ? 1 : 0;
+  if (scope === "ready") return clips.filter((c) => c.state === "READY").length;
+  return clips.length;
 }

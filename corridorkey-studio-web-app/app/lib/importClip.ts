@@ -1,7 +1,22 @@
 "use client";
 
 import { fal } from "@fal-ai/client";
+import type { Id } from "../../convex/_generated/dataModel";
 import { useSessionClipStore } from "../stores/useSessionClipStore";
+
+// What persist() needs from the caller — exactly what convex/clips.ts:save accepts.
+export interface PersistArgs {
+  name: string;
+  sourceUrl: string;
+  thumbnailUrl: string;
+  previewFrameUrls: string[];
+  frameCount: number;
+  fps: number;
+  durationS: number;
+  width: number;
+  height: number;
+  codec: string;
+}
 
 // Configure the client once. All fal.* calls route through our Next.js
 // server proxy so FAL_KEY never touches the browser.
@@ -37,11 +52,17 @@ interface ExtractResult {
  *   1. Upload the source to fal CDN
  *   2. Invoke the extract app with the resulting URL
  *   3. Populate useSessionClipStore
+ *   4. If `persist` is provided, save the clip to Convex and stash the
+ *      returned clipId on the session store. The Convex row then takes
+ *      over as the "real" clip — the session row hides itself.
  *
  * Errors land on the store (`stage === "error"`) rather than throwing —
  * UI just watches the store for transitions.
  */
-export async function importClip(file: File): Promise<void> {
+export async function importClip(
+  file: File,
+  persist?: (args: PersistArgs) => Promise<Id<"clips">>,
+): Promise<void> {
   ensureConfigured();
   const store = useSessionClipStore.getState();
 
@@ -71,7 +92,7 @@ export async function importClip(file: File): Promise<void> {
     const result = (await fal.subscribe(EXTRACT_APP_ID, {
       input: {
         video_url: sourceUrl,
-        max_dim: 480,
+        max_dim: 1080,
         jpeg_quality: 80,
       },
       logs: false,
@@ -87,7 +108,7 @@ export async function importClip(file: File): Promise<void> {
     })) as { data: ExtractResult };
 
     const data = result.data;
-    store.setMeta({
+    const meta = {
       name: file.name,
       sourceUrl,
       thumbnailUrl: data.thumbnail_url,
@@ -98,13 +119,26 @@ export async function importClip(file: File): Promise<void> {
       width: data.width,
       height: data.height,
       codec: data.codec,
-    });
+    };
+    store.setMeta(meta);
 
     // Warm the browser cache by firing parallel image fetches for every
     // preview frame. Without this, scrubbing and playback trigger a fresh
     // network round-trip per frame — smooth playback needs the frames
     // already cached by the time React requests them via <img src>.
     prefetchAll(data.preview_frame_urls);
+
+    // Persist to Convex so the clip survives a refresh and shows up in
+    // the sidebar as a real row. KEY-press then just dispatches keying
+    // on the saved clip.
+    if (persist) {
+      try {
+        const clipId = await persist(meta);
+        useSessionClipStore.getState().setSavedClipId(clipId);
+      } catch (err) {
+        store.setError(`Save failed: ${formatError(err)}`);
+      }
+    }
   } catch (err) {
     store.setError(`Extract failed: ${formatError(err)}`);
   }

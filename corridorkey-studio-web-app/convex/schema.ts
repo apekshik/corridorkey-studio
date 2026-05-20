@@ -13,20 +13,66 @@ export default defineSchema({
     .index("by_workos_id", ["workosId"])
     .index("by_email", ["email"]),
 
+  // A project owns clips. Flat hierarchy (ADR-02) — the name is free-form
+  // and may contain slashes for display convention ("Atrium / Plate B")
+  // but is semantically single-level. `coverClipId` is reserved for the
+  // slice-5 cover picker; no UI in v1.
+  //
+  // `settings` holds the ADR-01 parameter surface at project scope so
+  // explicit save (⌘S) restores them across reloads. Per-clip overrides
+  // may come later, but the default workflow is project-wide for v1.
+  projects: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    coverClipId: v.optional(v.id("clips")),
+    settings: v.optional(
+      v.object({
+        inferenceParams: v.object({
+          inputIsLinear: v.boolean(),
+          despillStrength: v.number(),
+          autoDespeckle: v.boolean(),
+          despeckleSize: v.number(),
+          refinerScale: v.number(),
+        }),
+        outputConfig: v.object({
+          fgEnabled: v.boolean(),
+          fgFormat: v.union(v.literal("exr"), v.literal("png")),
+          fgPremult: v.union(v.literal("premult"), v.literal("straight")),
+          matteEnabled: v.boolean(),
+          matteFormat: v.union(v.literal("exr"), v.literal("png")),
+          compEnabled: v.boolean(),
+          compFormat: v.union(v.literal("exr"), v.literal("png")),
+          processedEnabled: v.boolean(),
+          processedFormat: v.union(v.literal("exr"), v.literal("png")),
+          generateCompPreview: v.boolean(),
+        }),
+        lastSavedAt: v.number(),
+      })
+    ),
+  }).index("by_user", ["userId", "updatedAt"]),
+
   // A clip represents a source video a user has saved. Sessions that haven't
   // been saved never hit this table — they live entirely in the browser.
+  //
+  // `projectId` is the stable owner (slice 3+). `userId` remains so auth
+  // checks are cheap without a second hop through `projects`.
   //
   // `previewFrameUrls` is an array of fal CDN URLs for 480p preview JPEGs,
   // one per source frame. Populated once by the extract fal app. Keying
   // outputs go to the `frames` table, not here.
   clips: defineTable({
     userId: v.id("users"),
+    projectId: v.optional(v.id("projects")),
     name: v.string(),
     state: v.union(
+      v.literal("UPLOADING"),
       v.literal("EXTRACTING"),
       v.literal("RAW"),
       v.literal("MASKED"),
       v.literal("READY"),
+      v.literal("KEYING"),
       v.literal("COMPLETE"),
       v.literal("ERROR")
     ),
@@ -54,12 +100,15 @@ export default defineSchema({
 
     // fal.queue request id for webhook correlation
     falExtractRequestId: v.optional(v.string()),
+    falKeyingRequestId: v.optional(v.string()),
 
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId", "createdAt"])
-    .index("by_fal_extract_request", ["falExtractRequestId"]),
+    .index("by_project", ["projectId", "createdAt"])
+    .index("by_fal_extract_request", ["falExtractRequestId"])
+    .index("by_fal_keying_request", ["falKeyingRequestId"]),
 
   // Output frames from keying. Sparse — rows only exist for frames that
   // have at least one rendered layer. A frame with only an alpha hint and

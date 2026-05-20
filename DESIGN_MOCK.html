@@ -1,0 +1,2762 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>CorridorKey Studio</title>
+<meta name="viewport" content="width=1440, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+  :root {
+    /* Tokens - softened brutalism */
+    --bg-0: #0b0c0e;      /* deepest */
+    --bg-1: #101114;      /* panel */
+    --bg-2: #15171b;      /* raised */
+    --bg-3: #1b1e23;      /* raised-2 */
+    --bg-4: #23272e;      /* input/hover */
+    --ink-0: #f2efe8;     /* primary ink - warm off-white */
+    --ink-1: #c8c4bb;     /* secondary */
+    --ink-2: #8a8882;     /* tertiary / labels */
+    --ink-3: #5a5a55;     /* muted / disabled */
+    --ink-4: #3a3a36;     /* hairline */
+    --rule: #272a2f;      /* divider */
+    --rule-strong: #3a3d44;
+
+    --accent: #eab308;    /* yellow - live state */
+    --accent-ink: #0b0c0e;
+    --ok: #86efac;
+    --warn: #fbbf24;
+    --err:  #f87171;
+    --hint-fg: #34d399;   /* green hint */
+    --hint-bg: #f472b6;   /* magenta-red hint (distinct from err) */
+
+    --serif: 'Instrument Serif', 'Times New Roman', serif;
+    --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+    --pad: 14px;
+    --pad-sm: 10px;
+    --pad-xs: 6px;
+
+    --rail-w: 320px;
+    --params-w: 320px;
+    --topbar-h: 56px;
+    --statusbar-h: 28px;
+    --sectionlabel-h: 32px;
+  }
+
+  /* ——— density tweaks ——— */
+  html[data-density="compact"]   { --pad: 10px; --pad-sm: 7px; --topbar-h: 48px; --sectionlabel-h: 28px; --rail-w: 300px; --params-w: 300px; }
+  html[data-density="ultra"]     { --pad: 7px;  --pad-sm: 5px; --topbar-h: 42px; --sectionlabel-h: 24px; --rail-w: 280px; --params-w: 280px; }
+
+  /* ——— accent tweaks ——— */
+  html[data-accent="yellow"] { --accent: #eab308; --accent-ink: #0b0c0e; }
+  html[data-accent="green"]  { --accent: #4ade80; --accent-ink: #0b0c0e; }
+  html[data-accent="orange"] { --accent: #ff5c1a; --accent-ink: #fff; }
+  html[data-accent="ivory"]  { --accent: #f2efe8; --accent-ink: #0b0c0e; }
+
+  /* ——— chrome weight ——— */
+  html[data-chrome="hair"]   { --rule: #1d2025; --rule-strong: #2a2d33; }
+  html[data-chrome="heavy"]  { --rule: #3a3d44; --rule-strong: #52565e; }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg-0); color: var(--ink-0); height: 100%; }
+  body {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-feature-settings: "ss01", "ss02", "cv11";
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    letter-spacing: 0.01em;
+  }
+
+  button { font-family: inherit; font-size: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; letter-spacing: inherit; }
+  input { font-family: inherit; color: inherit; }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+
+  /* ============ LAYOUT ============ */
+  .app {
+    display: grid;
+    grid-template-rows: var(--topbar-h) 1fr var(--statusbar-h);
+    height: 100vh;
+    min-height: 720px;
+  }
+
+  /* ============ TOP BAR ============ */
+  .topbar {
+    display: grid;
+    grid-template-columns: var(--rail-w) minmax(0, 1fr) auto;
+    align-items: stretch;
+    border-bottom: 1px solid var(--rule-strong);
+    background: var(--bg-1);
+    min-width: 0;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 var(--pad);
+    border-right: 1px solid var(--rule-strong);
+    min-width: 0;
+  }
+  .brand-mark {
+    width: 26px; height: 26px; flex-shrink: 0;
+    border: 1px solid var(--ink-0);
+    position: relative;
+    display: grid; place-items: center;
+  }
+  .brand-mark::before {
+    content: ""; position: absolute; inset: 3px;
+    border: 1px solid var(--ink-2);
+  }
+  .brand-mark::after {
+    content: ""; position: absolute;
+    width: 6px; height: 6px; background: var(--accent);
+    top: 2px; right: 2px;
+  }
+  .brand-name {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 22px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    color: var(--ink-0);
+    white-space: nowrap;
+  }
+  .brand-sub {
+    font-size: 10px;
+    color: var(--ink-2);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding-top: 4px;
+  }
+
+  .top-actions {
+    display: flex; align-items: center;
+    padding: 0 var(--pad);
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .project {
+    display: flex; align-items: center; gap: 14px;
+    padding-right: 12px;
+    border-right: 1px solid var(--rule);
+    margin-right: 2px;
+    height: 60%;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+  .project > div:first-child { min-width: 0; display: flex; flex-direction: column; gap: 3px; line-height: 1; }
+  .project-label { font-size: 9.5px; color: var(--ink-2); letter-spacing: 0.22em; text-transform: uppercase; white-space: nowrap; }
+  .project-name {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 20px;
+    color: var(--ink-0);
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .project-meta { color: var(--ink-2); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
+
+  .top-right { display: flex; align-items: center; gap: 0; padding-right: 0; border-left: 1px solid var(--rule-strong); flex-shrink: 0; }
+
+  /* Split button KEY */
+  .key-group {
+    display: flex;
+    align-items: stretch;
+    height: calc(var(--topbar-h) - 16px);
+    margin: 8px 0 8px auto;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+    position: relative;
+  }
+  .key-main {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 14px 0 14px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    font-size: 12px;
+    border-right: 1px solid rgba(0,0,0,0.25);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .key-main .count {
+    font-size: 10px;
+    font-weight: 500;
+    opacity: 0.72;
+    letter-spacing: 0.14em;
+  }
+  .key-scope {
+    padding: 0 10px;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .key-scope .caret { font-size: 8px; opacity: 0.7; }
+  .key-dropdown {
+    position: absolute;
+    top: calc(100% + 1px); right: 0;
+    min-width: 260px;
+    background: var(--bg-2);
+    border: 1px solid var(--rule-strong);
+    color: var(--ink-0);
+    z-index: 20;
+    display: none;
+  }
+  .key-group[data-open="true"] .key-dropdown { display: block; }
+  .key-dropdown-item {
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 12px; padding: 10px 12px;
+    border-bottom: 1px solid var(--rule);
+    text-align: left;
+    width: 100%;
+    cursor: pointer;
+  }
+  .key-dropdown-item:last-child { border-bottom: 0; }
+  .key-dropdown-item:hover { background: var(--bg-3); }
+  .key-dropdown-item .label { letter-spacing: 0.16em; text-transform: uppercase; font-size: 10.5px; }
+  .key-dropdown-item .sub { font-size: 10px; color: var(--ink-2); margin-top: 3px; letter-spacing: 0.05em; text-transform: none; }
+  .key-dropdown-item .n { color: var(--ink-2); font-size: 10.5px; align-self: start; }
+  .key-dropdown-item.active { background: var(--bg-3); }
+  .key-dropdown-item.active .label { color: var(--accent); }
+
+  .stop-btn {
+    display: flex; align-items: center; gap: 8px;
+    height: calc(var(--topbar-h) - 16px);
+    margin: 8px 6px 8px 8px;
+    padding: 0 12px;
+    border: 1px solid var(--rule-strong);
+    color: var(--ink-1);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .stop-btn .dot { width: 8px; height: 8px; background: var(--err); }
+  .stop-btn:hover { border-color: var(--err); color: var(--err); }
+
+  .icon-btn {
+    width: 40px; height: var(--topbar-h);
+    display: grid; place-items: center;
+    border-left: 1px solid var(--rule);
+    color: var(--ink-1);
+    flex-shrink: 0;
+  }
+  .icon-btn:hover { background: var(--bg-2); color: var(--ink-0); }
+  .icon-btn svg { width: 16px; height: 16px; }
+
+  .user-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 10px;
+    border-left: 1px solid var(--rule);
+    height: 100%;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  @media (max-width: 1480px) { .user-name { display: none; } }
+  .avatar {
+    width: 24px; height: 24px;
+    background: var(--bg-4);
+    border: 1px solid var(--rule-strong);
+    display: grid; place-items: center;
+    font-size: 10px; letter-spacing: 0;
+    color: var(--ink-0);
+    font-weight: 600;
+  }
+  .user-name { font-size: 11px; color: var(--ink-1); }
+
+  /* ============ MAIN GRID ============ */
+  .main {
+    display: grid;
+    grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--params-w);
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  /* ============ LEFT RAIL: Media / Queue ============ */
+  .rail {
+    border-right: 1px solid var(--rule-strong);
+    background: var(--bg-1);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .rail-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--rule-strong);
+    height: var(--sectionlabel-h);
+  }
+  .rail-tab {
+    flex: 1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 var(--pad);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    color: var(--ink-2);
+    border-right: 1px solid var(--rule);
+    position: relative;
+  }
+  .rail-tab:last-child { border-right: 0; }
+  .rail-tab[aria-selected="true"] {
+    color: var(--ink-0);
+    background: var(--bg-2);
+  }
+  .rail-tab[aria-selected="true"]::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 0;
+    height: 2px; background: var(--ink-0);
+  }
+  .rail-tab .badge {
+    font-size: 10px; letter-spacing: 0.08em;
+    color: var(--ink-1);
+    background: var(--bg-3);
+    padding: 2px 6px;
+    border: 1px solid var(--rule);
+  }
+  .rail-tab[aria-selected="true"] .badge { color: var(--ink-0); border-color: var(--rule-strong); }
+
+  .rail-body { overflow: auto; padding: 0; }
+  .rail-body::-webkit-scrollbar { width: 8px; height: 8px; }
+  .rail-body::-webkit-scrollbar-thumb { background: var(--bg-3); }
+  .rail-body::-webkit-scrollbar-track { background: transparent; }
+
+  .media-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px var(--pad);
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink-2);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .media-toolbar .search {
+    flex: 1;
+    background: transparent;
+    border: 0; border-bottom: 1px solid var(--rule);
+    color: var(--ink-0);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 0;
+    outline: none;
+    letter-spacing: 0.02em;
+  }
+  .media-toolbar .search:focus { border-color: var(--ink-1); }
+  .media-toolbar .sort { color: var(--ink-2); padding-left: 8px; }
+
+  .media-list { list-style: none; margin: 0; padding: 0; }
+  .clip {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 10px var(--pad);
+    border-bottom: 1px solid var(--rule);
+    align-items: stretch;
+    cursor: pointer;
+    position: relative;
+  }
+  .clip:hover { background: var(--bg-2); }
+  .clip[aria-selected="true"] { background: var(--bg-2); }
+  .clip[aria-selected="true"]::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 2px; background: var(--accent);
+  }
+  .clip-thumb {
+    width: 64px; height: 42px;
+    background: var(--bg-0);
+    border: 1px solid var(--rule);
+    position: relative;
+    overflow: hidden;
+  }
+  .clip-thumb .state-bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 3px; background: var(--ink-4);
+  }
+  .clip-thumb .state-bar > i {
+    display: block; height: 100%;
+    background: var(--st-color, var(--ink-3));
+  }
+  .clip-thumb .tc {
+    position: absolute; top: 2px; left: 3px;
+    font-size: 8.5px;
+    color: var(--ink-1);
+    letter-spacing: 0.06em;
+    text-shadow: 0 0 4px rgba(0,0,0,0.8);
+  }
+  .clip-thumb .warn {
+    position: absolute; top: 2px; right: 3px;
+    width: 6px; height: 6px; background: var(--warn);
+  }
+  /* Thumbnail swatches (fake frame content) */
+  .thumb-bars { background:
+    linear-gradient(to right,
+      #c0c0c0 0 14.2%, #c0c000 14.2% 28.5%, #00c0c0 28.5% 42.8%,
+      #00c000 42.8% 57.1%, #c000c0 57.1% 71.4%, #c00000 71.4% 85.7%,
+      #0000c0 85.7% 100%); }
+  .thumb-green { background:
+    radial-gradient(ellipse at 50% 60%, #1a1a1a 0%, #1a1a1a 18%, transparent 18%),
+    linear-gradient(#2b7a42, #1f5c32); }
+  .thumb-studio { background:
+    radial-gradient(circle at 30% 55%, #0a0a0a 0 10%, transparent 10%),
+    linear-gradient(#5e8a3f, #3d6027); }
+  .thumb-hair { background:
+    radial-gradient(circle at 65% 50%, #0a0a0a 0 8%, transparent 8%),
+    linear-gradient(100deg, #3d8850 0%, #2f6b3e 50%, #244f30 100%); }
+  .thumb-wide { background:
+    linear-gradient(#3d8850, #1f4a2a); }
+  .thumb-dim { background:
+    linear-gradient(#2a3a2a, #1a2418); filter: grayscale(0.4); }
+  .thumb-upload {
+    background:
+      repeating-linear-gradient(-45deg, #1b1e23 0 6px, #23272e 6px 12px);
+  }
+  .thumb-extracting {
+    background: #101114;
+    position: relative;
+  }
+  .thumb-extracting::after {
+    content: ""; position: absolute; inset: 0;
+    background: repeating-linear-gradient(90deg, transparent 0 8px, rgba(234,179,8,0.15) 8px 9px);
+    animation: scan 2s linear infinite;
+  }
+  @keyframes scan { from { background-position: 0 0; } to { background-position: 16px 0; } }
+
+  .clip-body { min-width: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 1px 0; }
+  .clip-name {
+    font-size: 11.5px;
+    color: var(--ink-0);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    letter-spacing: 0.02em;
+  }
+  .clip-meta {
+    font-size: 10px;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+    display: flex; gap: 10px; align-items: center;
+  }
+  .clip-meta .sep { color: var(--ink-4); }
+  .clip-aside { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 4px; padding-top: 1px; min-width: 0; flex-shrink: 0; }
+  .clip-state {
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--st-ink, var(--ink-1));
+    padding: 2px 5px;
+    border: 1px solid var(--st-border, var(--rule));
+    background: var(--st-bg, transparent);
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  .clip-hints {
+    font-size: 9px;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  /* State tokens */
+  .st-extracting { --st-color: var(--warn); --st-ink: var(--warn); --st-border: #4a3b14; }
+  .st-uploading  { --st-color: #60a5fa; --st-ink: #93c5fd; --st-border: #23344a; }
+  .st-raw        { --st-color: #7c7c77; --st-ink: var(--ink-1); --st-border: var(--rule); }
+  .st-masked     { --st-color: #c084fc; --st-ink: #d8b4fe; --st-border: #3a2e4a; }
+  .st-ready      { --st-color: var(--ok); --st-ink: var(--ok); --st-border: #1f3b2a; }
+  .st-complete   { --st-color: var(--ink-1); --st-ink: var(--ink-0); --st-border: var(--ink-0); --st-bg: var(--bg-3); }
+  .st-error      { --st-color: var(--err); --st-ink: var(--err); --st-border: #4a1f1f; }
+  .st-keying     { --st-color: var(--accent); --st-ink: var(--accent); --st-border: #4a3b14; }
+  .st-keying .clip-state {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+  }
+
+  /* Upload progress row */
+  .clip-progress {
+    grid-column: 1 / -1;
+    height: 2px;
+    background: var(--bg-3);
+    margin-top: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+  .clip-progress > i {
+    display: block; height: 100%;
+    background: var(--accent);
+    width: var(--p, 40%);
+  }
+
+  /* ============ VIEWER ============ */
+  .viewer-wrap {
+    display: grid;
+    grid-template-rows: var(--sectionlabel-h) 1fr auto auto;
+    background: var(--bg-0);
+    min-width: 0;
+    overflow: hidden;
+  }
+  .viewer-header {
+    display: flex; align-items: stretch;
+    border-bottom: 1px solid var(--rule-strong);
+    background: var(--bg-1);
+    min-height: var(--sectionlabel-h);
+  }
+  .viewer-title {
+    padding: 0 var(--pad);
+    display: flex; align-items: center; gap: 12px;
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-2);
+    border-right: 1px solid var(--rule);
+    min-width: 0;
+  }
+  .viewer-title .clipname {
+    color: var(--ink-0);
+    letter-spacing: 0.04em;
+    text-transform: none;
+    font-size: 11.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 320px;
+  }
+  .viewer-title .clipstate {
+    font-size: 9.5px;
+    color: var(--accent);
+    letter-spacing: 0.22em;
+  }
+
+  .view-modes { display: flex; margin-left: auto; }
+  .view-mode-btn {
+    padding: 0 12px;
+    display: flex; align-items: center; gap: 6px;
+    border-left: 1px solid var(--rule);
+    font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .view-mode-btn:hover { color: var(--ink-0); }
+  .view-mode-btn[aria-pressed="true"] { color: var(--ink-0); background: var(--bg-2); }
+  .view-mode-btn .kbd { color: var(--ink-3); font-size: 9.5px; letter-spacing: 0.04em; }
+
+  /* Viewer canvas */
+  .viewer {
+    position: relative;
+    overflow: hidden;
+    background: #050506;
+  }
+  .viewer-inner {
+    position: absolute; inset: 0;
+    display: grid;
+  }
+  .viewer-inner.split-h { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+  .viewer-inner.split-v { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .viewer-inner.single  { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+  .viewer-inner.single .pane.input { display: none; }
+  .viewer-inner.split-v .pane.input { border-right: 0; border-bottom: 1px solid var(--rule-strong); }
+  .pane {
+    position: relative;
+    overflow: hidden;
+    border-right: 1px solid var(--rule-strong);
+  }
+  .pane:last-child { border-right: 0; }
+  .pane-label {
+    position: absolute; top: 10px; left: 10px;
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-0);
+    padding: 4px 8px;
+    background: rgba(11,12,14,0.75);
+    border: 1px solid var(--rule-strong);
+    z-index: 2;
+  }
+  .pane-label .tag { color: var(--ink-2); margin-right: 8px; }
+
+  /* Color bars plate */
+  .plate-bars {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(to bottom,
+        /* top bars 66% */
+        #c0c0c0 0 66%, transparent 66% 75%,
+        /* mid PLUGE lower */
+        transparent 75% 75%);
+  }
+  .plate {
+    position: absolute; inset: 0;
+    display: grid; grid-template-rows: 4fr 0.55fr 0.7fr;
+  }
+  .plate-top {
+    display: grid; grid-template-columns: repeat(7,1fr);
+  }
+  .plate-top > i {
+    display: block;
+  }
+  .plate-top > i:nth-child(1){ background:#c0c0c0;}
+  .plate-top > i:nth-child(2){ background:#c0c000;}
+  .plate-top > i:nth-child(3){ background:#00c0c0;}
+  .plate-top > i:nth-child(4){ background:#00c000;}
+  .plate-top > i:nth-child(5){ background:#c000c0;}
+  .plate-top > i:nth-child(6){ background:#c00000;}
+  .plate-top > i:nth-child(7){ background:#0000c0;}
+  .plate-mid { display: grid; grid-template-columns: repeat(7,1fr); }
+  .plate-mid > i:nth-child(1){ background:#0000c0;}
+  .plate-mid > i:nth-child(2){ background:#131313;}
+  .plate-mid > i:nth-child(3){ background:#c000c0;}
+  .plate-mid > i:nth-child(4){ background:#131313;}
+  .plate-mid > i:nth-child(5){ background:#00c0c0;}
+  .plate-mid > i:nth-child(6){ background:#131313;}
+  .plate-mid > i:nth-child(7){ background:#c0c0c0;}
+  .plate-bot { display: grid; grid-template-columns: 5fr 5fr 5fr 5fr 1fr 1fr 1fr 2fr 2fr 2fr; }
+  .plate-bot > i:nth-child(1){ background:#00214c;}
+  .plate-bot > i:nth-child(2){ background:#ffffff;}
+  .plate-bot > i:nth-child(3){ background:#32006a;}
+  .plate-bot > i:nth-child(4){ background:#131313;}
+  .plate-bot > i:nth-child(5){ background:#090909;}
+  .plate-bot > i:nth-child(6){ background:#131313;}
+  .plate-bot > i:nth-child(7){ background:#1d1d1d;}
+  .plate-bot > i:nth-child(8){ background:#131313;}
+  .plate-bot > i:nth-child(9){ background:#131313;}
+  .plate-bot > i:nth-child(10){ background:#131313;}
+
+  /* Slate overlay */
+  .slate {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    pointer-events: none;
+  }
+  .slate-inner {
+    background: rgba(11,12,14,0.72);
+    border: 1px solid rgba(255,255,255,0.22);
+    color: #f2efe8;
+    padding: 14px 18px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 6px 18px;
+    min-width: 280px;
+  }
+  .slate-inner .k { color: rgba(242,239,232,0.6); }
+  .slate-title {
+    grid-column: 1 / -1;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--ink-0);
+    margin-bottom: 6px;
+  }
+
+  /* Timecode + crosshair */
+  .viewer-tc {
+    position: absolute; top: 10px; right: 10px;
+    font-size: 10.5px; letter-spacing: 0.1em;
+    color: var(--ink-0);
+    background: rgba(11,12,14,0.75);
+    border: 1px solid var(--rule-strong);
+    padding: 4px 8px;
+    z-index: 2;
+  }
+  .viewer-tc .r { color: var(--accent); }
+
+  .crosshair {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(to right, transparent calc(50% - 0.5px), rgba(255,255,255,0.05) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
+      linear-gradient(to bottom, transparent calc(50% - 0.5px), rgba(255,255,255,0.05) calc(50% - 0.5px) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+  }
+
+  /* Output pane — matte / alpha treatments */
+  .pane.output { background: #0a0a0a; }
+  .pane.output .plate { filter: contrast(1.08); }
+
+  /* ALPHA view: show alpha matte (B&W figure silhouette inferred) */
+  .alpha-matte {
+    position: absolute; inset: 0;
+    background: #000;
+  }
+  .alpha-matte::before {
+    /* matte shape - abstracted figure */
+    content: "";
+    position: absolute;
+    left: 30%; right: 30%;
+    top: 12%; bottom: 0;
+    background:
+      radial-gradient(ellipse 38% 20% at 50% 14%, #ffffff 0%, #ffffff 70%, #cfcfcf 80%, transparent 90%),
+      radial-gradient(ellipse 50% 60% at 50% 65%, #ffffff 0%, #ffffff 60%, transparent 72%);
+  }
+  .alpha-matte::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0; height: 22%;
+    background: linear-gradient(transparent, rgba(255,255,255,0.35) 60%, rgba(255,255,255,0.55));
+    mask: radial-gradient(ellipse 22% 100% at 50% 100%, #000 50%, transparent 75%);
+    -webkit-mask: radial-gradient(ellipse 22% 100% at 50% 100%, #000 50%, transparent 75%);
+  }
+
+  /* Checker background for FG / COMP */
+  .checker {
+    position: absolute; inset: 0;
+    background:
+      conic-gradient(#2b2d31 25%, #1e2024 0 50%, #2b2d31 0 75%, #1e2024 0);
+    background-size: 20px 20px;
+  }
+
+  /* Silhouette mask for FG (plate visible within figure shape) */
+  .fg-masked {
+    position: absolute; inset: 0;
+    /* the silhouette of the figure — we'll reveal the bars through it */
+    -webkit-mask:
+      radial-gradient(ellipse 12% 20% at 50% 22%, #000 0 72%, transparent 78%),
+      radial-gradient(ellipse 16% 38% at 50% 62%, #000 0 68%, transparent 78%);
+    -webkit-mask-composite: source-over;
+    mask:
+      radial-gradient(ellipse 12% 20% at 50% 22%, #000 0 72%, transparent 78%),
+      radial-gradient(ellipse 16% 38% at 50% 62%, #000 0 68%, transparent 78%);
+  }
+
+  /* Streaming frames overlay - shows "live" vs unrendered */
+  .stream-overlay {
+    position: absolute;
+    left: 0; right: 0; top: 0; bottom: 0;
+    pointer-events: none;
+  }
+  .stream-overlay::before {
+    /* diagonal pending tile */
+    content: "";
+    position: absolute; left: 68%; right: 0; top: 0; bottom: 0;
+    background:
+      repeating-linear-gradient(-45deg, rgba(11,12,14,0.88) 0 8px, rgba(20,22,26,0.88) 8px 16px);
+    border-left: 1px dashed var(--accent);
+  }
+  .stream-overlay::after {
+    content: "PENDING · FRAMES 168–240";
+    position: absolute;
+    right: 10px; bottom: 50%;
+    transform: rotate(-90deg) translate(50%, 0);
+    transform-origin: right bottom;
+    font-size: 9.5px; letter-spacing: 0.22em;
+    color: var(--accent);
+  }
+
+  /* Layer tabs / transport */
+  .viewer-layers {
+    display: flex;
+    align-items: stretch;
+    border-top: 1px solid var(--rule-strong);
+    background: var(--bg-1);
+    height: 36px;
+  }
+  .layer-tab {
+    padding: 0 14px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-2);
+    border-right: 1px solid var(--rule);
+    position: relative;
+  }
+  .layer-tab:hover { color: var(--ink-0); }
+  .layer-tab[aria-pressed="true"] { color: var(--ink-0); background: var(--bg-2); }
+  .layer-tab[aria-pressed="true"]::before {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--ink-0);
+  }
+  .layer-tab .kbd { color: var(--ink-3); font-size: 9.5px; letter-spacing: 0.04em; }
+  .layer-tab .mini {
+    width: 14px; height: 10px;
+    border: 1px solid currentColor;
+    position: relative;
+  }
+  .layer-tab .mini.alpha { background: linear-gradient(to right, #fff 0 45%, #000 45% 100%); border-color: transparent; }
+  .layer-tab .mini.fg    { background: conic-gradient(#3d8850 25%, #1f4a2a 0 50%, #3d8850 0 75%, #1f4a2a 0); background-size: 6px 5px; border-color: transparent; }
+  .layer-tab .mini.matte { background: #fff; border-color: #fff; }
+  .layer-tab .mini.comp  { background: linear-gradient(135deg, #c0c000 0 50%, #00c0c0 50% 100%); border-color: transparent; }
+  .layer-tab .mini.proc  { background: linear-gradient(#666, #222); border-color: transparent; }
+
+  .viewer-layers .spacer { flex: 1; }
+  .viewer-tools {
+    display: flex; align-items: center; border-left: 1px solid var(--rule-strong);
+  }
+  .tool-btn {
+    width: 36px; height: 36px;
+    display: grid; place-items: center;
+    border-left: 1px solid var(--rule);
+    color: var(--ink-1);
+  }
+  .tool-btn:first-child { border-left: 0; }
+  .tool-btn:hover { background: var(--bg-2); color: var(--ink-0); }
+  .tool-btn[aria-pressed="true"] { color: var(--accent); }
+  .tool-btn svg { width: 14px; height: 14px; }
+
+  /* Scrub strip */
+  .scrub {
+    border-top: 1px solid var(--rule-strong);
+    background: var(--bg-1);
+    padding: 10px var(--pad) 12px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    min-width: 0;
+  }
+  .transport { display: flex; gap: 2px; }
+  .transport button {
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    border: 1px solid var(--rule);
+    color: var(--ink-1);
+  }
+  .transport button.play { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .transport button:hover { border-color: var(--rule-strong); color: var(--ink-0); }
+  .transport button svg { width: 12px; height: 12px; }
+
+  .scrub-track {
+    position: relative;
+    height: 42px;
+    background: var(--bg-0);
+    border: 1px solid var(--rule);
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .scrub-processed { position: absolute; left: 0; top: 0; bottom: 0; width: 70%; background: rgba(234,179,8,0.12); }
+  .scrub-keyframes {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 10px;
+    display: flex;
+  }
+  .scrub-keyframes > i {
+    height: 100%; width: 2px;
+    background: var(--hint-fg);
+    margin-right: 1px;
+  }
+  .scrub-ticks {
+    position: absolute; left: 0; right: 0; top: 0;
+    height: 12px;
+    display: flex;
+    padding: 0;
+  }
+  .scrub-ticks > i {
+    flex: 1;
+    border-right: 1px solid var(--rule);
+    font-size: 8.5px;
+    color: var(--ink-3);
+    padding-left: 3px;
+    line-height: 12px;
+    letter-spacing: 0.02em;
+  }
+  .scrub-ticks > i:last-child { border-right: 0; }
+  .scrub-playhead {
+    position: absolute;
+    top: -2px; bottom: -2px;
+    width: 2px; background: var(--ink-0);
+    pointer-events: none;
+  }
+  .scrub-playhead::before, .scrub-playhead::after {
+    content: ""; position: absolute;
+    left: 50%; transform: translateX(-50%);
+    width: 0; height: 0;
+  }
+  .scrub-playhead::before {
+    top: -1px;
+    border: 4px solid transparent;
+    border-top-color: var(--ink-0);
+    border-bottom: 0;
+  }
+  .scrub-edge {
+    position: absolute;
+    top: 0; bottom: 10px; width: 1px;
+    background: var(--accent);
+  }
+
+  .scrub-meta {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 10px;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .scrub-meta .n { color: var(--ink-0); }
+  .scrub-meta .sep { color: var(--ink-4); }
+
+  /* ============ RIGHT: Parameters ============ */
+  .params {
+    background: var(--bg-1);
+    border-left: 1px solid var(--rule-strong);
+    display: grid;
+    grid-template-rows: var(--sectionlabel-h) 1fr;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .params-head {
+    border-bottom: 1px solid var(--rule-strong);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 var(--pad);
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-2);
+  }
+  .params-head .model {
+    color: var(--ink-0);
+    padding: 2px 6px;
+    border: 1px solid var(--rule-strong);
+    letter-spacing: 0.16em;
+    font-size: 10px;
+  }
+  .params-body { overflow: auto; padding: 0 0 20px; }
+  .params-body::-webkit-scrollbar { width: 8px; }
+  .params-body::-webkit-scrollbar-thumb { background: var(--bg-3); }
+  .params-body::-webkit-scrollbar-track { background: transparent; }
+
+  .pgroup { border-bottom: 1px solid var(--rule); padding: 10px var(--pad) 12px; }
+  .pgroup-title {
+    display: flex; align-items: baseline; justify-content: space-between;
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-2);
+    margin-bottom: 8px;
+  }
+  .pgroup-title .sum {
+    color: var(--ink-3); font-size: 10px; letter-spacing: 0.04em; text-transform: none;
+  }
+  .prow {
+    display: grid;
+    grid-template-columns: 1fr 54px;
+    align-items: center;
+    gap: 10px;
+    padding: 3px 0;
+  }
+  .plabel {
+    font-size: 10.5px;
+    color: var(--ink-1);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pvalue {
+    font-size: 10.5px;
+    color: var(--ink-0);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .pslider {
+    grid-column: 1 / -1;
+    position: relative;
+    height: 18px;
+    display: flex; align-items: center;
+    cursor: pointer;
+    margin-top: 1px;
+  }
+  .pslider-track {
+    position: absolute; left: 0; right: 0; height: 2px;
+    background: var(--bg-4);
+  }
+  .pslider-fill {
+    position: absolute; left: 0; height: 2px;
+    background: var(--ink-0);
+  }
+  .pslider-thumb {
+    position: absolute;
+    width: 8px; height: 12px;
+    background: var(--ink-0);
+    transform: translateX(-50%);
+  }
+  .pslider:hover .pslider-thumb { background: var(--accent); }
+
+  .pseg {
+    grid-column: 1 / -1;
+    display: flex; border: 1px solid var(--rule);
+    margin-top: 2px;
+  }
+  .pseg button {
+    flex: 1;
+    padding: 5px 8px;
+    font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-2);
+    border-right: 1px solid var(--rule);
+  }
+  .pseg button:last-child { border-right: 0; }
+  .pseg button[aria-pressed="true"] { background: var(--bg-3); color: var(--ink-0); }
+
+  .ptoggle {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 0;
+  }
+  .switch {
+    width: 28px; height: 14px; background: var(--bg-3); border: 1px solid var(--rule);
+    position: relative; cursor: pointer;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 1px; left: 1px;
+    width: 10px; height: 10px; background: var(--ink-2);
+    transition: left 0.15s;
+  }
+  .switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+  .switch[aria-checked="true"]::after { left: 15px; background: var(--accent-ink); }
+
+  .coverage {
+    padding: 10px var(--pad);
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    background: var(--bg-2);
+    display: grid; gap: 6px;
+  }
+  .coverage-head {
+    display: flex; justify-content: space-between;
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--warn);
+  }
+  .coverage-bar {
+    height: 3px; background: var(--bg-4); position: relative;
+  }
+  .coverage-bar > i { display: block; height: 100%; background: var(--warn); width: 35%; }
+  .coverage-note {
+    font-size: 10px; color: var(--ink-2); letter-spacing: 0.04em;
+  }
+  .coverage-note b { color: var(--warn); font-weight: 500; }
+
+  /* ============ STATUS BAR ============ */
+  .statusbar {
+    display: flex; align-items: stretch;
+    border-top: 1px solid var(--rule-strong);
+    background: var(--bg-1);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: var(--ink-2);
+    overflow: hidden;
+    min-width: 0;
+  }
+  .stat {
+    display: flex; align-items: center; gap: 7px;
+    padding: 0 10px;
+    border-right: 1px solid var(--rule);
+    height: 100%;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .stat.collapse { min-width: 0; overflow: hidden; flex-shrink: 1; }
+  @media (max-width: 1520px) { .stat.hide-md { display: none; } }
+  .stat:last-child { border-right: 0; }
+  .stat .k { color: var(--ink-3); letter-spacing: 0.2em; text-transform: uppercase; font-size: 9.5px; }
+  .stat .v { color: var(--ink-0); font-variant-numeric: tabular-nums; }
+  .stat .dot { width: 6px; height: 6px; background: var(--ok); border-radius: 50%; }
+  .stat .dot.live { background: var(--accent); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .stat.push { margin-left: auto; }
+  .stat .chip {
+    padding: 2px 5px;
+    border: 1px solid var(--rule);
+    color: var(--ink-1);
+    letter-spacing: 0.14em; text-transform: uppercase; font-size: 9px;
+  }
+  .stat .chip.active { border-color: var(--accent); color: var(--accent); }
+
+  /* ============ QUEUE (rail tab content) ============ */
+  .queue-list { padding: 4px 0; }
+  .qjob {
+    padding: 10px var(--pad);
+    border-bottom: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 10px;
+    align-items: baseline;
+  }
+  .qjob-name {
+    font-size: 11px; color: var(--ink-0);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .qjob-id { font-size: 9.5px; color: var(--ink-3); letter-spacing: 0.04em; }
+  .qjob-state {
+    font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-1);
+  }
+  .qjob-state.running { color: var(--accent); }
+  .qjob-state.queued  { color: var(--ink-2); }
+  .qjob-state.done    { color: var(--ok); }
+  .qjob-state.err     { color: var(--err); }
+  .qjob-bar {
+    grid-column: 1 / -1;
+    height: 2px; background: var(--bg-3); position: relative;
+    margin-top: 4px;
+  }
+  .qjob-bar > i { display: block; height: 100%; background: var(--ink-1); width: 0%; }
+  .qjob.running .qjob-bar > i { background: var(--accent); }
+  .qjob.done .qjob-bar > i { background: var(--ok); width: 100% !important; }
+  .qjob-meta {
+    grid-column: 1 / -1;
+    display: flex; justify-content: space-between;
+    font-size: 9.5px; color: var(--ink-2);
+    letter-spacing: 0.04em;
+    margin-top: 3px;
+  }
+  .qjob-cancel {
+    color: var(--ink-3);
+    letter-spacing: 0.18em; text-transform: uppercase; font-size: 9px;
+  }
+  .qjob-cancel:hover { color: var(--err); }
+
+  /* ============ HINT PAINTER MODAL ============ */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(5,5,7,0.75);
+    z-index: 100;
+    display: none;
+    align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-backdrop[data-open="true"] { display: flex; }
+  .modal {
+    width: min(1120px, 92vw);
+    height: min(720px, 88vh);
+    background: var(--bg-0);
+    border: 1px solid var(--rule-strong);
+    display: grid;
+    grid-template-rows: 52px 1fr 48px;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+  }
+  .modal-head {
+    display: flex; align-items: center;
+    border-bottom: 1px solid var(--rule-strong);
+    padding: 0 var(--pad);
+    gap: 14px;
+  }
+  .modal-title {
+    font-family: var(--serif); font-style: italic;
+    font-size: 22px; line-height: 1;
+    color: var(--ink-0);
+  }
+  .modal-sub {
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .modal-close {
+    margin-left: auto;
+    width: 36px; height: 36px;
+    display: grid; place-items: center;
+    border: 1px solid var(--rule);
+    color: var(--ink-1);
+  }
+  .modal-close:hover { border-color: var(--err); color: var(--err); }
+
+  .modal-body { display: grid; grid-template-columns: 240px 1fr 240px; overflow: hidden; }
+  .paint-tools {
+    border-right: 1px solid var(--rule-strong);
+    padding: var(--pad);
+    display: grid; gap: 10px; align-content: start;
+    font-size: 10.5px; color: var(--ink-2);
+  }
+  .paint-tool-group { display: grid; gap: 6px; }
+  .paint-tool-title { letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-3); font-size: 9.5px; }
+  .brush-btn {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--rule);
+    color: var(--ink-1);
+    text-align: left;
+  }
+  .brush-btn .sw { width: 12px; height: 12px; border: 1px solid rgba(255,255,255,0.25); }
+  .brush-btn.fg .sw { background: var(--hint-fg); }
+  .brush-btn.bg .sw { background: var(--hint-bg); }
+  .brush-btn[aria-pressed="true"] { border-color: var(--ink-0); color: var(--ink-0); background: var(--bg-2); }
+  .brush-btn .kbd { margin-left: auto; color: var(--ink-3); font-size: 9.5px; }
+
+  .brush-size {
+    display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+  }
+  .brush-size .v { color: var(--ink-0); font-variant-numeric: tabular-nums; }
+
+  .paint-canvas {
+    position: relative;
+    background: #050506;
+    overflow: hidden;
+  }
+  .paint-canvas .plate { filter: brightness(0.85) contrast(1.05); }
+  .paint-canvas svg {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  .paint-canvas .crosshair-brush {
+    position: absolute;
+    width: 80px; height: 80px;
+    border: 1.5px solid var(--hint-fg);
+    border-radius: 50%;
+    pointer-events: none;
+    left: 60%; top: 48%;
+    transform: translate(-50%,-50%);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.5);
+  }
+  .paint-canvas .crosshair-brush::before {
+    content: ""; position: absolute; inset: 48%; background: var(--hint-fg);
+  }
+
+  .paint-keyframes {
+    border-left: 1px solid var(--rule-strong);
+    padding: 12px var(--pad);
+    display: grid; gap: 10px; align-content: start;
+    overflow: auto;
+  }
+  .paint-kf-title {
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-2);
+    display: flex; justify-content: space-between;
+  }
+  .paint-kf {
+    border: 1px solid var(--rule);
+    padding: 6px;
+    display: grid; grid-template-columns: 64px 1fr; gap: 8px;
+    align-items: center;
+  }
+  .paint-kf[aria-selected="true"] { border-color: var(--accent); }
+  .paint-kf .kf-thumb {
+    width: 64px; height: 40px; background: var(--bg-0);
+    border: 1px solid var(--rule);
+    position: relative;
+    overflow: hidden;
+  }
+  .paint-kf .kf-thumb .mark-fg, .paint-kf .kf-thumb .mark-bg {
+    position: absolute; width: 14px; height: 14px; border-radius: 50%;
+    mix-blend-mode: normal;
+  }
+  .paint-kf .kf-thumb .mark-fg { background: var(--hint-fg); left: 36px; top: 16px; opacity: 0.85; }
+  .paint-kf .kf-thumb .mark-bg { background: var(--hint-bg); left: 12px; top: 10px; opacity: 0.8; }
+  .paint-kf-info { display: grid; gap: 2px; font-size: 10px; color: var(--ink-2); }
+  .paint-kf-info .n { color: var(--ink-0); font-size: 11px; letter-spacing: 0.04em; }
+  .paint-kf-info .hint { color: var(--hint-fg); font-size: 9.5px; letter-spacing: 0.08em; }
+
+  .modal-foot {
+    border-top: 1px solid var(--rule-strong);
+    display: flex; align-items: center;
+    padding: 0 var(--pad);
+    gap: 12px;
+    font-size: 10.5px;
+    color: var(--ink-2);
+  }
+  .modal-foot .spacer { flex: 1; }
+  .btn {
+    padding: 8px 14px;
+    border: 1px solid var(--rule-strong);
+    color: var(--ink-0);
+    letter-spacing: 0.2em; text-transform: uppercase; font-size: 10.5px;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .btn:hover { border-color: var(--ink-1); }
+  .btn.primary:hover { filter: brightness(1.05); }
+
+  /* ============ TWEAKS PANEL ============ */
+  #tweaks {
+    position: fixed;
+    right: 16px; bottom: 44px;
+    width: 300px;
+    background: var(--bg-1);
+    border: 1px solid var(--rule-strong);
+    z-index: 90;
+    display: none;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  }
+  #tweaks[data-open="true"] { display: block; }
+  .tweaks-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px var(--pad);
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  .tweaks-head .t { font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--ink-0); }
+  .tweaks-body { padding: 6px var(--pad) 12px; display: grid; gap: 8px; }
+  .tweak-row { display: grid; gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--rule); }
+  .tweak-row:last-child { border-bottom: 0; }
+  .tweak-row .lab {
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-2);
+  }
+  .tweak-seg { display: flex; border: 1px solid var(--rule); }
+  .tweak-seg button {
+    flex: 1; padding: 6px 4px;
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-2);
+    border-right: 1px solid var(--rule);
+  }
+  .tweak-seg button:last-child { border-right: 0; }
+  .tweak-seg button[aria-pressed="true"] { background: var(--bg-3); color: var(--ink-0); }
+  .swatches { display: flex; gap: 6px; }
+  .swatches button {
+    width: 26px; height: 26px;
+    border: 1px solid var(--rule-strong);
+    position: relative;
+  }
+  .swatches button[aria-pressed="true"] { outline: 1px solid var(--ink-0); outline-offset: 2px; }
+
+  /* Responsive guard */
+  @media (max-width: 1200px) {
+    :root { --rail-w: 280px; --params-w: 280px; }
+  }
+
+  /* Hint on topbar next to KEY — partial hints warning */
+  .coverage-chip {
+    display: flex; align-items: center; gap: 8px;
+    height: calc(var(--topbar-h) - 16px);
+    margin: 8px 0;
+    padding: 0 10px;
+    border: 1px solid #4a3b14;
+    color: var(--warn);
+    background: rgba(234,179,8,0.06);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .coverage-chip .dot { width: 6px; height: 6px; background: var(--warn); }
+
+  .session-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 2px 8px; border: 1px solid var(--rule);
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-2);
+  }
+
+  /* ============================ PROJECT SWITCHER ============================ */
+  .project-switch {
+    background: transparent; border: 0; padding: 0; margin: 0;
+    color: inherit; font: inherit; text-align: left; cursor: pointer;
+    display: flex; align-items: center; min-width: 0;
+    border-radius: 0;
+  }
+  .project-switch:hover .project-name,
+  .project-switch[aria-expanded="true"] .project-name { color: var(--ink-0); }
+  .project-switch:hover .caret { color: var(--accent); }
+  .project-label .sep { color: var(--ink-3); margin: 0 4px; letter-spacing: 0; font-weight: 400; }
+  .project-name .caret {
+    display: inline-block; margin-left: 6px; color: var(--ink-3);
+    font-size: 11px; transition: transform 0.15s, color 0.15s;
+    font-family: var(--mono); font-style: normal;
+  }
+  .project-switch[aria-expanded="true"] .project-name .caret { transform: translateY(1px); color: var(--accent); }
+
+  .project-meta .save-state {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .save-state .sv-dirty { display: none; align-items: center; gap: 5px; color: var(--warn); }
+  .save-state .sv-dirty .dot { width: 5px; height: 5px; background: var(--warn); border-radius: 50%; }
+  .save-state .sv-btn {
+    display: none;
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    background: var(--accent); color: #0a0806;
+    border: 0; padding: 3px 8px 3px 9px; cursor: pointer;
+    gap: 5px; align-items: center;
+    font-weight: 600;
+  }
+  .save-state .sv-btn .kbd {
+    color: #0a0806; opacity: 0.55; font-size: 9px; letter-spacing: 0.04em;
+    border: 1px solid rgba(10,8,6,0.25); padding: 0 3px; line-height: 1.3;
+    border-radius: 1px;
+  }
+  .save-state .sv-btn:hover { background: #f5ea98; }
+  .save-state[data-dirty="true"] .sv-clean { display: none; }
+  .save-state[data-dirty="true"] .sv-dirty { display: inline-flex; }
+  .save-state[data-dirty="true"] .sv-btn { display: inline-flex; }
+
+  /* project dropdown panel */
+  .project-dropdown {
+    position: absolute;
+    top: calc(var(--topbar-h) - 6px); left: 0;
+    width: 380px;
+    background: var(--bg-1);
+    border: 1px solid var(--rule-strong);
+    box-shadow: 0 18px 48px rgba(0,0,0,0.55), 0 2px 0 rgba(0,0,0,0.3);
+    z-index: 200;
+    display: flex; flex-direction: column;
+    font-family: var(--mono);
+  }
+  .project-dropdown[hidden] { display: none; }
+  .project { position: relative; }
+
+  .pd-head { padding: 10px; border-bottom: 1px solid var(--rule); }
+  .pd-search {
+    width: 100%; background: var(--bg-0); border: 1px solid var(--rule);
+    color: var(--ink-0); font: inherit; font-size: 10px; letter-spacing: 0.14em;
+    padding: 7px 9px; text-transform: uppercase;
+    outline: none;
+  }
+  .pd-search:focus { border-color: var(--ink-2); }
+  .pd-search::placeholder { color: var(--ink-3); letter-spacing: 0.18em; }
+
+  .pd-section { padding: 6px 6px 8px; max-height: 360px; overflow-y: auto; }
+  .pd-section-title {
+    padding: 6px 8px 4px;
+    font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .pd-item {
+    display: grid; grid-template-columns: 44px 1fr auto;
+    gap: 10px; align-items: center;
+    width: 100%; padding: 7px 8px;
+    background: transparent; border: 0; text-align: left; cursor: pointer;
+    color: inherit; font: inherit;
+  }
+  .pd-item:hover { background: var(--bg-2); }
+  .pd-cover {
+    width: 44px; height: 28px;
+    background: var(--bg-0);
+    border: 1px solid var(--rule);
+    position: relative; overflow: hidden;
+  }
+  .pd-cover.cover-hair { background: linear-gradient(135deg, #2a3f2a, #0d1a0d 60%), #0d1a0d; }
+  .pd-cover.cover-green { background: #1a3a1a; }
+  .pd-cover.cover-studio { background: linear-gradient(180deg, #1a1a2a, #0d0d1a); }
+  .pd-cover.cover-wide { background: linear-gradient(90deg, #2a1a1a, #3a2a1a); }
+  .pd-cover.cover-bars {
+    background: linear-gradient(90deg, #c0c0c0 14%, #c0c000 14% 28%, #00c0c0 28% 42%, #00c000 42% 56%, #c000c0 56% 70%, #c00000 70% 84%, #0000c0 84%);
+  }
+  .pd-body { min-width: 0; }
+  .pd-name {
+    font-family: var(--serif); font-style: italic;
+    font-size: 15px; color: var(--ink-0);
+    line-height: 1.15;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pd-meta {
+    font-size: 9.5px; letter-spacing: 0.12em; color: var(--ink-3);
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+  }
+  .pd-check {
+    color: var(--accent); font-size: 11px;
+    width: 18px; text-align: center;
+  }
+  .pd-item:not(.current) .pd-check { color: transparent; }
+
+  .pd-footer {
+    border-top: 1px solid var(--rule);
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 6px;
+    padding: 6px;
+  }
+  .pd-action {
+    padding: 8px 10px;
+    background: transparent; border: 1px solid var(--rule);
+    color: var(--ink-0);
+    font-family: var(--mono);
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; justify-content: center;
+  }
+  .pd-action:hover { background: var(--bg-2); border-color: var(--ink-3); }
+  .pd-action.ghost { color: var(--ink-2); border-color: transparent; }
+  .pd-action .plus { color: var(--accent); font-size: 13px; line-height: 1; }
+
+  /* ============================ COMING-SOON MARKERS ============================ */
+  .soon-tag {
+    display: inline-flex; align-items: center;
+    padding: 1px 5px;
+    font-size: 8.5px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--ink-3);
+    border: 1px dashed var(--rule-strong);
+    background: rgba(255,255,255,0.02);
+    font-family: var(--mono);
+    font-weight: 500;
+    margin-left: 6px;
+    line-height: 1.25;
+  }
+  .view-mode-btn.soon {
+    opacity: 0.45; cursor: not-allowed;
+  }
+  .view-mode-btn.soon .soon-tag { margin-left: 6px; }
+  .view-mode-btn.soon:hover { background: transparent; color: var(--ink-2); }
+
+  .pseg.locked button.soon {
+    opacity: 0.4; cursor: not-allowed;
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 6px;
+  }
+  .pseg button.soon .soon-tag { margin-left: 0; }
+
+  .soon-row {
+    display: flex; align-items: center; justify-content: space-between;
+    opacity: 0.55; padding-top: 8px; margin-top: 2px;
+    border-top: 1px dashed var(--rule);
+  }
+
+  .soon-group {
+    opacity: 0.55;
+  }
+  .soon-group .pgroup-title { color: var(--ink-2); }
+  .soon-group .pgroup-title .soon-tag { margin-left: auto; }
+  .prow.disabled { color: var(--ink-3); }
+  .prow.disabled .pvalue { color: var(--ink-3); }
+  .pslider.disabled { opacity: 0.5; pointer-events: none; }
+  .pslider.disabled .pslider-track { background: var(--rule); }
+  .switch.off { background: var(--bg-0); border-color: var(--rule); }
+  .switch.off::before { transform: translateX(0); background: var(--ink-3); }
+
+  .prow-note {
+    font-size: 10px; line-height: 1.5; color: var(--ink-2);
+    padding: 4px 0 2px; font-family: var(--mono);
+    letter-spacing: 0.02em;
+  }
+  .prow-note b { color: var(--ink-1); font-weight: 500; }
+
+  /* ============================ SLATE · EXIF MARKERS ============================ */
+  .slate-inner .k.exif,
+  .slate-inner .exif-v {
+    position: relative;
+  }
+  .slate-inner .exif-v {
+    color: var(--ink-1);
+    border-bottom: 1px dotted var(--rule-strong);
+    padding-bottom: 1px;
+  }
+  .slate-exif-note {
+    position: absolute; bottom: 6px; right: 10px;
+    font-size: 8.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-3);
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--mono);
+  }
+  .slate-exif-note .exif-dot {
+    width: 5px; height: 5px;
+    border: 1px dashed var(--rule-strong);
+    border-radius: 50%;
+  }
+  .slate { position: relative; }
+
+  /* ============================ MEDIA DROPZONE (empty-adjacent) ============================ */
+  .media-dropzone {
+    margin: 10px 10px 14px;
+    padding: 18px 14px;
+    border: 1px dashed var(--rule-strong);
+    text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .media-dropzone:hover {
+    border-color: var(--ink-3);
+    background: rgba(255,255,255,0.015);
+  }
+  .mdz-icon { color: var(--ink-3); width: 22px; height: 22px; }
+  .mdz-icon svg { width: 100%; height: 100%; }
+  .mdz-title {
+    font-family: var(--serif); font-style: italic;
+    font-size: 15px; color: var(--ink-1);
+  }
+  .mdz-sub {
+    font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* ============================ NEEDS TRANSCODE STATE ============================ */
+  .clip.st-raw .clip-state { color: var(--warn); }
+  .clip.st-raw .state-bar i { background: var(--warn); opacity: 0.6; }
+
+
+  /* ============================ OUTPUT ROWS (per-channel) ============================ */
+  .out-row {
+    display: grid; grid-template-columns: 1fr auto;
+    align-items: center; gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .out-row:last-of-type { border-bottom: 1px solid var(--rule); }
+  .out-toggle {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: transparent; border: 0; padding: 0; cursor: pointer;
+    color: inherit; text-align: left;
+    min-width: 0;
+  }
+  .out-toggle .ot-sw {
+    width: 26px; height: 14px;
+    background: var(--bg-0); border: 1px solid var(--rule-strong);
+    position: relative; flex-shrink: 0;
+  }
+  .out-toggle .ot-sw::before {
+    content: ""; position: absolute; top: 1px; left: 1px;
+    width: 10px; height: 10px;
+    background: var(--ink-3);
+    transition: transform 0.15s, background 0.15s;
+  }
+  .out-toggle[aria-checked="true"] .ot-sw { background: var(--accent); border-color: var(--accent); }
+  .out-toggle[aria-checked="true"] .ot-sw::before { transform: translateX(12px); background: #0a0806; }
+  .out-toggle .ot-lab {
+    font-family: var(--mono); font-weight: 600;
+    font-size: 11px; letter-spacing: 0.16em;
+    color: var(--ink-0);
+  }
+  .out-toggle[aria-checked="false"] .ot-lab { color: var(--ink-2); }
+  .out-toggle .ot-hint {
+    font-family: var(--mono);
+    font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .out-fmt {
+    display: inline-flex;
+    border: 1px solid var(--rule);
+    background: var(--bg-0);
+  }
+  .out-fmt button {
+    padding: 5px 9px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+    background: transparent; border: 0; color: var(--ink-2);
+    cursor: pointer; text-transform: uppercase;
+    border-right: 1px solid var(--rule);
+  }
+  .out-fmt button:last-child { border-right: 0; }
+  .out-fmt button[aria-pressed="true"] {
+    background: var(--bg-2); color: var(--ink-0);
+  }
+  .out-sub {
+    display: inline-flex;
+    border: 1px solid var(--rule);
+    background: var(--bg-0);
+    margin: -3px 0 8px 36px;
+    width: fit-content;
+  }
+  .out-sub button {
+    padding: 4px 9px;
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em;
+    background: transparent; border: 0; color: var(--ink-3);
+    cursor: pointer; text-transform: uppercase;
+    border-right: 1px solid var(--rule);
+  }
+  .out-sub button:last-child { border-right: 0; }
+  .out-sub button[aria-pressed="true"] { background: var(--bg-2); color: var(--ink-1); }
+  .out-divider {
+    height: 0; border-top: 1px dashed var(--rule);
+    margin: 10px -14px 8px;
+  }
+
+  .accent-btn {
+    background: var(--accent); color: #0a0806 !important;
+    border-color: var(--accent) !important;
+    font-weight: 600;
+  }
+  .accent-btn:hover { background: #f5ea98; }
+
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ======================= TOP BAR ======================= -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <div>
+        <div class="brand-name">Corridorkey</div>
+        <div class="brand-sub">Studio · v0.14</div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <div class="project">
+        <button class="project-switch" id="projectSwitch" aria-haspopup="menu" aria-expanded="false" title="Switch project">
+          <div>
+            <div class="project-label">Project <span class="sep">/</span></div>
+            <div class="project-name">Atrium · Plate B <span class="caret">▾</span></div>
+          </div>
+        </button>
+        <div class="project-meta">
+          <span>08 clips</span><span class="sep">·</span>
+          <span>02:14:07 total</span><span class="sep">·</span>
+          <span class="save-state" id="saveState" data-dirty="false">
+            <span class="sv-clean">saved 14:02</span>
+            <span class="sv-dirty"><span class="dot"></span>unsaved</span>
+            <button class="sv-btn" id="saveBtn">Save <span class="kbd">⌘S</span></button>
+          </span>
+        </div>
+
+        <!-- Project switcher dropdown -->
+        <div class="project-dropdown" id="projectDropdown" role="menu" hidden>
+          <div class="pd-head">
+            <input class="pd-search" placeholder="Find project /" />
+          </div>
+          <div class="pd-section">
+            <div class="pd-section-title">Recent</div>
+            <button class="pd-item current" role="menuitem">
+              <div class="pd-cover cover-hair"></div>
+              <div class="pd-body">
+                <div class="pd-name">Atrium · Plate B</div>
+                <div class="pd-meta">08 clips · edited 14:02</div>
+              </div>
+              <div class="pd-check">✓</div>
+            </button>
+            <button class="pd-item" role="menuitem">
+              <div class="pd-cover cover-green"></div>
+              <div class="pd-body">
+                <div class="pd-name">Corridor Promo · Spec Reel</div>
+                <div class="pd-meta">14 clips · yesterday</div>
+              </div>
+            </button>
+            <button class="pd-item" role="menuitem">
+              <div class="pd-cover cover-studio"></div>
+              <div class="pd-body">
+                <div class="pd-name">Pilot 03 · Interview Pickups</div>
+                <div class="pd-meta">05 clips · 3 days ago</div>
+              </div>
+            </button>
+            <button class="pd-item" role="menuitem">
+              <div class="pd-cover cover-wide"></div>
+              <div class="pd-body">
+                <div class="pd-name">Rooftop Dance · Test</div>
+                <div class="pd-meta">22 clips · last week</div>
+              </div>
+            </button>
+            <button class="pd-item" role="menuitem">
+              <div class="pd-cover cover-bars"></div>
+              <div class="pd-body">
+                <div class="pd-name">Reference Plates · 2024</div>
+                <div class="pd-meta">62 clips · 3 weeks ago</div>
+              </div>
+            </button>
+          </div>
+          <div class="pd-footer">
+            <button class="pd-action" role="menuitem"><span class="plus">+</span> New Project</button>
+            <button class="pd-action ghost" role="menuitem">Manage all…</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="coverage-chip" title="42 of 120 frames hinted on current clip">
+        <span class="dot"></span> HINTS 42 / 120
+      </div>
+    </div>
+
+    <div class="top-right" style="margin-left:auto">
+      <button class="stop-btn" id="stopBtn" title="Stop all jobs (Esc)">
+        <span class="dot"></span> Stop
+      </button>
+
+      <div class="key-group" id="keyGroup" role="group" aria-label="Key action">
+        <button class="key-main" id="keyMain">
+          Key <span class="count">ALL-READY · 04</span>
+        </button>
+        <button class="key-scope" id="keyScope" aria-haspopup="menu">
+          <span id="keyScopeLabel">Scope</span>
+          <span class="caret">▼</span>
+        </button>
+        <div class="key-dropdown" role="menu">
+          <button class="key-dropdown-item" data-scope="selected">
+            <span><span class="label">Key Selected</span><div class="sub">Run only the highlighted clip</div></span>
+            <span class="n">01</span>
+          </button>
+          <button class="key-dropdown-item active" data-scope="ready">
+            <span><span class="label">Key All-Ready</span><div class="sub">Run every clip with hints present</div></span>
+            <span class="n">04</span>
+          </button>
+          <button class="key-dropdown-item" data-scope="all">
+            <span><span class="label">Key Everything</span><div class="sub">Auto-generate hints for clips that need them</div></span>
+            <span class="n">08</span>
+          </button>
+        </div>
+      </div>
+
+      <button class="icon-btn" title="Export config">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v13M6 10l6 6 6-6M4 21h16"/></svg>
+      </button>
+      <button class="icon-btn" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <div class="user-chip">
+        <div class="avatar">IO</div>
+        <div class="user-name">ivo.otis</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======================= MAIN ======================= -->
+  <main class="main">
+
+    <!-- LEFT RAIL -->
+    <aside class="rail">
+      <div class="rail-tabs" role="tablist">
+        <button class="rail-tab" role="tab" aria-selected="true" data-tab="media">
+          <span>Media</span><span class="badge">08</span>
+        </button>
+        <button class="rail-tab" role="tab" aria-selected="false" data-tab="queue">
+          <span>Queue</span><span class="badge" id="queueBadge">03</span>
+        </button>
+      </div>
+
+      <div class="rail-body">
+        <!-- ============ MEDIA TAB ============ -->
+        <div data-tab-panel="media">
+          <div class="media-toolbar">
+            <input class="search" placeholder="FILTER CLIPS /" />
+            <span class="sort">SORT ↓</span>
+          </div>
+          <ul class="media-list" id="mediaList">
+
+            <li class="clip st-keying" data-id="c1" aria-selected="true">
+              <div class="clip-thumb thumb-hair">
+                <div class="tc">01:04:12</div>
+                <div class="state-bar"><i style="width: 68%"></i></div>
+              </div>
+              <div class="clip-body">
+                <div class="clip-name">atrium_wide_A003_C012.mov</div>
+                <div class="clip-meta"><span>3840×2160</span><span class="sep">·</span><span>24 fps</span><span class="sep">·</span><span>240 fr</span></div>
+              </div>
+              <div class="clip-aside">
+                <div class="clip-state">KEYING 68%</div>
+                <div class="clip-hints">HINTS 42/120</div>
+              </div>
+            </li>
+
+            <li class="clip st-masked" data-id="c2">
+              <div class="clip-thumb thumb-green">
+                <div class="tc">00:48:03</div>
+                <div class="state-bar"><i style="width: 100%"></i></div>
+              </div>
+              <div class="clip-body">
+                <div class="clip-name">atrium_cu_A003_C008.mov</div>
+                <div class="clip-meta"><span>3840×2160</span><span class="sep">·</span><span>24 fps</span><span class="sep">·</span><span>180 fr</span></div>
+              </div>
+              <div class="clip-aside">
+                <div class="clip-state">MASKED</div>
+                <div class="clip-hints">HINTS 180/180</div>
+              </div>
+            </li>
+
+            <li class="clip st-ready" data-id="c3">
+              <div class="clip-thumb thumb-studio">
+                <div class="tc">00:22:18</div>
+                <div class="state-bar"><i style="width: 100%"></i></div>
+              </div>
+              <div class="clip-body">
+                <div class="clip-name">atrium_ms_A003_C004.mov</div>
+                <div class="clip-meta"><span>3840×2160</span><span class="sep">·</span><span>24 fps</span><span class="sep">·</span><span>132 fr</span></div>
+              </div>
+              <div class="clip-aside">
+                <div class="clip-state">READY</div>
+                <div class="clip-hints">AUTO · GVM</div>
+              </div>
+            </li>
+
+            <li class="clip st-ready" data-id="c4">
+              <div class="clip-thumb thumb-wide">
+                <div class="tc">00:19:02</div>
+                <div class="state-bar"><i style="width: 100%"></i></div>
+              </div>
+              <div class="clip-body">
+                <div class="clip-name">atrium_insert_A003_C002.mov</div>
+                <div class="clip-meta"><span>1920×1080</span><span class="sep">·</span><span>24 fps</span><span class="sep">·</span><span>96 fr</span></div>
+              </div>
+              <div class="clip-aside">
+                <div class="clip-state">READY</div>
+                <div class="clip-hints">AUTO · GVM</div>
+              </div>
+            </li>
+
+            <li class="clip st-complete" data-id="c5">
+              <div class="clip-thumb thumb-bars">
+                <div class="tc">00:00:00</div>
+                <div class="state-bar"><i style="width: 100%"></i></div>
+              </div>
+              <div class="clip-body">
+                <div class="clip-name">reference_bars_A000.mov</div>
+                <div class="clip-meta"><span>3840×2160</span><span class="sep">·</span><span>24 fps</span><span class="sep">·</span><span>12 fr</span></div>
+              </div>
+              <div class="clip-aside">
+                <div class="clip-state">COMPLETE</div>
+                <div class="clip-hints">EXR · LINEAR</div>
+              </div>
+            </li>
+
+            <li class="clip st-raw" data-id="c6">
+              <div class="clip-thumb thumb-dim">
+                <div class="tc">00:14:22</div>
+                <div class="warn" title="Requires transcode"></div>
+                <div class="state-bar"><i style="width: 100%"></i></div>
+              </div>
+              <div class="clip-body">
+                <div class="clip-name">bts_interview_A004_C001.mov</div>
+                <div class="clip-meta"><span>1280×720</span><span class="sep">·</span><span>30 fps</span><span class="sep">·</span><span>No hints</span></div>
+              </div>
+              <div class="clip-aside">
+                <div class="clip-state">NEEDS TRANSCODE</div>
+                <div class="clip-hints">ProRes 422</div>
+              </div>
+            </li>
+
+            <li class="clip st-extracting" data-id="c7">
+              <div class="clip-thumb thumb-extracting">
+                <div class="tc">——:——</div>
+                <div class="state-bar"><i style="width: 42%"></i></div>
+              </div>
+              <div class="clip-body">
+                <div class="clip-name">atrium_plate_B_A005_C001.mov</div>
+                <div class="clip-meta"><span>3840×2160</span><span class="sep">·</span><span>decoding</span></div>
+                <div class="clip-progress"><i style="--p: 42%"></i></div>
+              </div>
+              <div class="clip-aside">
+                <div class="clip-state">EXTRACTING</div>
+                <div class="clip-hints">SERVER-SIDE</div>
+              </div>
+            </li>
+
+            <li class="clip st-uploading" data-id="c8">
+              <div class="clip-thumb thumb-upload">
+                <div class="tc">——:——</div>
+                <div class="state-bar"><i style="width: 18%"></i></div>
+              </div>
+              <div class="clip-body">
+                <div class="clip-name">atrium_plate_C_A005_C002.mov</div>
+                <div class="clip-meta"><span>ProRes 4444</span><span class="sep">·</span><span>18% · 412 MB</span></div>
+                <div class="clip-progress"><i style="--p: 18%"></i></div>
+              </div>
+              <div class="clip-aside">
+                <div class="clip-state">UPLOADING</div>
+                <div class="clip-hints">412 MB</div>
+              </div>
+            </li>
+
+          </ul>
+          <div class="media-dropzone" aria-label="Drop plates">
+            <div class="mdz-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>
+            </div>
+            <div class="mdz-title">Drop plates here</div>
+            <div class="mdz-sub">or import from S3, GCS, Dropbox, Frame.io</div>
+          </div>
+        </div>
+
+        <!-- ============ QUEUE TAB ============ -->
+        <div data-tab-panel="queue" hidden>
+          <div class="media-toolbar">
+            <span class="search" style="border:0">ACTIVE · 01 · QUEUED · 02</span>
+            <span class="sort">GPU · A100 / EU-W4</span>
+          </div>
+          <div class="queue-list">
+
+            <div class="qjob running">
+              <div class="qjob-name">atrium_wide_A003_C012 · KEY</div>
+              <div class="qjob-state running">RUNNING</div>
+              <div class="qjob-bar"><i id="qbar1" style="width: 68%"></i></div>
+              <div class="qjob-meta">
+                <span>FR 164 / 240 · 24 fps</span>
+                <span>ETA 00:46 · $0.18</span>
+                <button class="qjob-cancel">CANCEL</button>
+              </div>
+            </div>
+
+            <div class="qjob queued">
+              <div class="qjob-name">atrium_ms_A003_C004 · KEY</div>
+              <div class="qjob-state queued">QUEUED</div>
+              <div class="qjob-bar"><i style="width: 0%"></i></div>
+              <div class="qjob-meta">
+                <span>FR 0 / 132 · awaits GPU</span>
+                <span>ETA ~01:10 · $0.09</span>
+                <button class="qjob-cancel">CANCEL</button>
+              </div>
+            </div>
+
+            <div class="qjob queued">
+              <div class="qjob-name">atrium_insert_A003_C002 · KEY</div>
+              <div class="qjob-state queued">QUEUED</div>
+              <div class="qjob-bar"><i style="width: 0%"></i></div>
+              <div class="qjob-meta">
+                <span>FR 0 / 96 · awaits GPU</span>
+                <span>ETA ~00:42 · $0.07</span>
+                <button class="qjob-cancel">CANCEL</button>
+              </div>
+            </div>
+
+            <div class="qjob done">
+              <div class="qjob-name">atrium_cu_A003_C008 · KEY</div>
+              <div class="qjob-state done">DONE · 00:58</div>
+              <div class="qjob-bar"><i></i></div>
+              <div class="qjob-meta">
+                <span>FR 180 / 180 · $0.22</span>
+                <span>JOB · 8F3A-0142 · A100</span>
+                <button class="qjob-cancel">LOG</button>
+              </div>
+            </div>
+
+            <div class="qjob done">
+              <div class="qjob-name">reference_bars_A000 · EXPORT</div>
+              <div class="qjob-state done">DELIVERED</div>
+              <div class="qjob-bar"><i></i></div>
+              <div class="qjob-meta">
+                <span>EXR · LINEAR · 12 FR</span>
+                <span>s3://delivery/atrium/...</span>
+                <button class="qjob-cancel">OPEN</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- VIEWER -->
+    <section class="viewer-wrap">
+      <!-- header -->
+      <div class="viewer-header">
+        <div class="viewer-title">
+          <span>CLIP</span>
+          <span class="clipname" id="viewerClipName">atrium_wide_A003_C012.mov</span>
+          <span class="clipstate" id="viewerClipState">· KEYING · 68%</span>
+        </div>
+        <div class="view-modes">
+          <button class="view-mode-btn" data-mode="split-h" aria-pressed="true">A │ B <span class="kbd">F</span></button>
+          <button class="view-mode-btn" data-mode="split-v" aria-pressed="false">A ─ B</button>
+          <button class="view-mode-btn" data-mode="single" aria-pressed="false">SINGLE <span class="kbd">S</span></button>
+          <button class="view-mode-btn soon" data-mode="paint" id="openPainter" disabled title="Manual hint painting ships with VideoMaMa — coming soon">HINT PAINTER <span class="soon-tag">SOON</span></button>
+        </div>
+      </div>
+
+      <!-- viewer canvas -->
+      <div class="viewer">
+        <div class="viewer-inner split-h" id="viewerInner">
+
+          <!-- INPUT PANE -->
+          <div class="pane input">
+            <div class="plate">
+              <div class="plate-top"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="plate-mid"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="plate-bot"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="slate">
+              <div class="slate-inner">
+                <div class="slate-title">Atrium · Plate B</div>
+                <span class="k">ROLL</span><span>A003</span>
+                <span class="k">SCENE</span><span>12 / TK 04</span>
+                <span class="k exif">CAM</span><span class="exif-v">ALEXA 35 · S35 ANA 1.8×</span>
+                <span class="k exif">COLOR</span><span class="exif-v">ARRI LOGC4 / AWG4</span>
+                <span class="k">FPS</span><span>24.000 · 01:04:12:14</span>
+                <span class="k exif">LENS</span><span class="exif-v">40mm T2 · f/4</span>
+              </div>
+              <div class="slate-exif-note">
+                <span class="exif-dot"></span>from sidecar · v1.1
+              </div>
+            </div>
+            <div class="pane-label"><span class="tag">A ·</span>INPUT · sRGB</div>
+            <div class="viewer-tc">01:04:12:<span class="r">14</span></div>
+          </div>
+
+          <!-- OUTPUT PANE -->
+          <div class="pane output" id="outputPane" data-layer="comp">
+            <!-- COMP layer (default) -->
+            <div class="plate" id="outputPlate">
+              <div class="plate-top"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="plate-mid"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="plate-bot"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="crosshair"></div>
+            <div class="stream-overlay"></div>
+            <div class="pane-label"><span class="tag">B ·</span><span id="outputLayerLabel">COMP · OVER BARS</span></div>
+            <div class="viewer-tc">01:04:12:<span class="r">14</span></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- layer tabs -->
+      <div class="viewer-layers">
+        <button class="layer-tab" data-layer="alpha" aria-pressed="false"><span class="mini alpha"></span>Alpha <span class="kbd">1</span></button>
+        <button class="layer-tab" data-layer="fg" aria-pressed="false"><span class="mini fg"></span>FG <span class="kbd">2</span></button>
+        <button class="layer-tab" data-layer="matte" aria-pressed="false"><span class="mini matte"></span>Matte <span class="kbd">3</span></button>
+        <button class="layer-tab" data-layer="comp" aria-pressed="true"><span class="mini comp"></span>Comp <span class="kbd">4</span></button>
+        <button class="layer-tab" data-layer="processed" aria-pressed="false"><span class="mini proc"></span>Processed <span class="kbd">5</span></button>
+        <div class="spacer"></div>
+        <div class="viewer-tools">
+          <button class="tool-btn" title="Fit to view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+          <button class="tool-btn" title="100%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M8 11h6M11 8v6"/></svg></button>
+          <button class="tool-btn" title="Show ruler" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 17L17 3l4 4L7 21zM7 9l2 2M11 5l2 2M13 15l2 2M9 13l2 2"/></svg></button>
+          <button class="tool-btn" title="Checkerboard background"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg></button>
+        </div>
+      </div>
+
+      <!-- scrub strip -->
+      <div class="scrub">
+        <div class="transport">
+          <button title="First frame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5l-12 7 12 7z"/></svg></button>
+          <button title="Previous frame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 5l-10 7 10 7z"/></svg></button>
+          <button class="play" id="playBtn" title="Play (Space)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l14 8-14 8z"/></svg></button>
+          <button title="Next frame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 5l10 7-10 7z"/></svg></button>
+          <button title="Last frame"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5l12 7-12 7z"/></svg></button>
+        </div>
+
+        <div class="scrub-track" id="scrubTrack">
+          <div class="scrub-processed" id="scrubProcessed"></div>
+          <div class="scrub-ticks" id="scrubTicks"></div>
+          <div class="scrub-keyframes" id="scrubKeyframes"></div>
+          <div class="scrub-edge" id="scrubEdge" style="left: 68%"></div>
+          <div class="scrub-playhead" id="scrubPlayhead" style="left: 54%"></div>
+        </div>
+
+        <div class="scrub-meta">
+          <span class="n" id="scrubFrame">FR 164</span><span class="sep">/</span><span id="scrubTotal">240</span>
+          <span class="sep">·</span>
+          <span id="scrubTime">01:04:12:14</span>
+          <span class="sep">·</span>
+          <span>24.000 fps</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- PARAMETERS -->
+    <aside class="params">
+      <div class="params-head">
+        <span>Parameters</span>
+      </div>
+      <div class="params-body">
+
+        <!-- ALPHA HINT -->
+        <div class="pgroup hint-group">
+          <div class="pgroup-title"><span>Alpha Hint</span><span class="sum">source · gvm auto</span></div>
+          <div class="coverage" style="margin: 2px -14px -12px">
+            <div class="coverage-head"><span>Coverage</span><span>42 / 120</span></div>
+            <div class="coverage-bar"><i></i></div>
+            <div class="coverage-note">
+              <b>Partial hints.</b> 78 frames still need GVM coverage.
+            </div>
+            <div style="display:flex; gap:6px; margin-top:2px">
+              <button class="btn accent-btn" style="flex:1; padding:7px 8px; font-size:10px; letter-spacing:0.18em">Generate Remaining</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- COLOR SPACE -->
+        <div class="pgroup">
+          <div class="pgroup-title"><span>Color Space</span><span class="sum">per-clip</span></div>
+          <div class="prow ptoggle"><span class="plabel">Linear workflow</span><span class="switch" aria-checked="true" role="switch"></span></div>
+          <div class="prow"><span class="plabel">Input space</span><span class="pvalue"></span></div>
+          <div class="prow pseg">
+            <button aria-pressed="false">sRGB</button>
+            <button aria-pressed="true">LINEAR</button>
+          </div>
+        </div>
+
+        <!-- REFINE -->
+        <div class="pgroup">
+          <div class="pgroup-title"><span>Refine</span><span class="sum">corridorkey</span></div>
+          <div class="prow"><span class="plabel">Refiner strength</span><span class="pvalue">1.00</span></div>
+          <div class="pslider" data-v="33" data-range="0-3"><div class="pslider-track"></div><div class="pslider-fill" style="width:33.3%"></div><div class="pslider-thumb" style="left:33.3%"></div></div>
+          <div class="prow-note">
+            <b>0.0</b> skips refinement · <b>1.0</b> default · <b>3.0</b> maximum detail (slower).
+          </div>
+        </div>
+
+        <!-- DESPILL -->
+        <div class="pgroup">
+          <div class="pgroup-title"><span>Despill</span><span class="sum">green suppression</span></div>
+          <div class="prow"><span class="plabel">Strength</span><span class="pvalue">1.00</span></div>
+          <div class="pslider" data-v="100"><div class="pslider-track"></div><div class="pslider-fill" style="width:100%"></div><div class="pslider-thumb" style="left:100%"></div></div>
+          <div class="prow ptoggle"><span class="plabel">Auto despeckle</span><span class="switch" aria-checked="true" role="switch"></span></div>
+          <div class="prow"><span class="plabel">Despeckle size</span><span class="pvalue">400 px</span></div>
+          <div class="pslider" data-v="18" data-range="50-2000"><div class="pslider-track"></div><div class="pslider-fill" style="width:17.9%"></div><div class="pslider-thumb" style="left:17.9%"></div></div>
+        </div>
+
+        <!-- OUTPUT -->
+        <div class="pgroup">
+          <div class="pgroup-title"><span>Output</span><span class="sum">per-job</span></div>
+
+          <!-- FG channel -->
+          <div class="out-row">
+            <button class="out-toggle" aria-checked="true" role="switch"><span class="ot-sw"></span><span class="ot-lab">FG</span><span class="ot-hint">foreground</span></button>
+            <div class="out-fmt pseg" role="group">
+              <button aria-pressed="true">EXR</button>
+              <button aria-pressed="false">PNG</button>
+            </div>
+          </div>
+          <div class="out-sub pseg" role="group" aria-label="FG alpha premultiplication">
+            <button aria-pressed="true">PREMULT</button>
+            <button aria-pressed="false">STRAIGHT</button>
+          </div>
+
+          <!-- MATTE channel -->
+          <div class="out-row">
+            <button class="out-toggle" aria-checked="true" role="switch"><span class="ot-sw"></span><span class="ot-lab">MATTE</span><span class="ot-hint">alpha only</span></button>
+            <div class="out-fmt pseg" role="group">
+              <button aria-pressed="true">EXR</button>
+              <button aria-pressed="false">PNG</button>
+            </div>
+          </div>
+
+          <!-- COMP channel -->
+          <div class="out-row">
+            <button class="out-toggle" aria-checked="false" role="switch"><span class="ot-sw"></span><span class="ot-lab">COMP</span><span class="ot-hint">over plate</span></button>
+            <div class="out-fmt pseg" role="group">
+              <button aria-pressed="true">PNG</button>
+              <button aria-pressed="false">EXR</button>
+            </div>
+          </div>
+
+          <!-- PROCESSED channel -->
+          <div class="out-row">
+            <button class="out-toggle" aria-checked="true" role="switch"><span class="ot-sw"></span><span class="ot-lab">PROCESSED</span><span class="ot-hint">full RGBA</span></button>
+            <div class="out-fmt pseg" role="group">
+              <button aria-pressed="true">EXR</button>
+              <button aria-pressed="false">PNG</button>
+            </div>
+          </div>
+
+          <div class="out-divider"></div>
+
+          <div class="prow ptoggle"><span class="plabel">Generate comp preview</span><span class="switch" aria-checked="true" role="switch"></span></div>
+          <div class="prow-note" style="color: var(--ink-3)">
+            Streams a low-res COMP during keying for live inspection.
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- ======================= STATUS BAR ======================= -->
+  <footer class="statusbar">
+    <div class="stat"><span class="dot"></span><span class="k">Cloud</span><span class="v">EU-W4 · A100</span></div>
+    <div class="stat"><span class="k">Queue</span><span class="v" id="statQueue">01 RUN · 02 WAIT</span></div>
+    <div class="stat"><span class="dot live"></span><span class="k">Stream</span><span class="v">164 / 240 fr · 3.8 fps</span></div>
+    <div class="stat"><span class="k">Session</span><span class="v" id="statCost">$0.42</span><span class="v" style="color:var(--ink-2)">· 2.1 GPU-min</span></div>
+    <div class="stat"><span class="k">Surge</span><span class="chip">OFF · SPOT</span></div>
+
+    <div class="stat push hide-md"><span class="k">Keys</span>
+      <span class="chip">1–5</span>
+      <span class="chip">F</span>
+      <span class="chip">S</span>
+      <span class="chip">⌘S</span>
+      <span class="chip">⌘K</span>
+    </div>
+    <div class="stat"><span class="k">Backend</span><span class="chip active">CLOUD</span></div>
+    <div class="stat"><button class="qjob-cancel" id="tweaksToggle" style="padding:0;color:var(--ink-1);">TWEAKS</button></div>
+  </footer>
+
+</div>
+
+<!-- ======================= HINT PAINTER MODAL ======================= -->
+<div class="modal-backdrop" id="paintModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Hint Painter</div>
+      <div class="modal-sub">atrium_wide_A003_C012 · FR 164 / 240 · MANUAL PAINT</div>
+      <button class="modal-close" id="paintClose" title="Close (Esc)">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- tools -->
+      <div class="paint-tools">
+        <div class="paint-tool-group">
+          <div class="paint-tool-title">Brush</div>
+          <button class="brush-btn fg" data-brush="fg" aria-pressed="true">
+            <span class="sw"></span>Foreground<span class="kbd">G</span>
+          </button>
+          <button class="brush-btn bg" data-brush="bg" aria-pressed="false">
+            <span class="sw"></span>Background<span class="kbd">R</span>
+          </button>
+        </div>
+
+        <div class="paint-tool-group">
+          <div class="paint-tool-title">Size</div>
+          <div class="brush-size">
+            <div class="pslider" data-brush-size><div class="pslider-track"></div><div class="pslider-fill" style="width:42%"></div><div class="pslider-thumb" style="left:42%"></div></div>
+            <span class="v">42 PX</span>
+          </div>
+          <div class="paint-tool-title" style="margin-top:4px">Hardness</div>
+          <div class="brush-size">
+            <div class="pslider"><div class="pslider-track"></div><div class="pslider-fill" style="width:68%"></div><div class="pslider-thumb" style="left:68%"></div></div>
+            <span class="v">0.68</span>
+          </div>
+        </div>
+
+        <div class="paint-tool-group">
+          <div class="paint-tool-title">Mode</div>
+          <div class="pseg" style="grid-column:1 / -1; display:flex;">
+            <button aria-pressed="true">PAINT</button>
+            <button aria-pressed="false">ERASE</button>
+          </div>
+        </div>
+
+        <div class="paint-tool-group">
+          <div class="paint-tool-title">Propagation</div>
+          <div class="prow" style="padding:0">
+            <span class="plabel">Neighbors</span><span class="pvalue">±08 FR</span>
+          </div>
+          <div class="pslider"><div class="pslider-track"></div><div class="pslider-fill" style="width:32%"></div><div class="pslider-thumb" style="left:32%"></div></div>
+        </div>
+      </div>
+
+      <!-- canvas -->
+      <div class="paint-canvas">
+        <div class="plate">
+          <div class="plate-top"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="plate-mid"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="plate-bot"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <svg viewBox="0 0 100 56" preserveAspectRatio="none">
+          <!-- FG strokes (green) -->
+          <path d="M 58 20 C 60 24, 62 30, 60 36 C 58 42, 55 46, 50 48"
+                stroke="#34d399" stroke-width="1.6" fill="none" stroke-linecap="round" opacity="0.92"/>
+          <path d="M 52 14 C 55 15, 58 17, 60 20"
+                stroke="#34d399" stroke-width="1.4" fill="none" stroke-linecap="round" opacity="0.92"/>
+          <circle cx="56" cy="16" r="1.2" fill="#34d399" opacity="0.9"/>
+          <circle cx="61" cy="34" r="1.2" fill="#34d399" opacity="0.9"/>
+          <!-- BG strokes (magenta) -->
+          <path d="M 10 18 L 40 22 L 32 36 L 8 38 Z"
+                stroke="#f472b6" stroke-width="0.4" fill="#f472b6" fill-opacity="0.18"/>
+          <path d="M 72 14 L 96 12 L 96 40 L 76 42 Z"
+                stroke="#f472b6" stroke-width="0.4" fill="#f472b6" fill-opacity="0.18"/>
+          <path d="M 4 10 L 18 8" stroke="#f472b6" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.9"/>
+          <path d="M 82 44 L 94 46" stroke="#f472b6" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.9"/>
+        </svg>
+        <div class="crosshair-brush"></div>
+        <div class="pane-label" style="top:10px;left:10px">PAINT · FR 164</div>
+        <div class="viewer-tc">01:04:12:<span class="r">14</span></div>
+      </div>
+
+      <!-- keyframes -->
+      <div class="paint-keyframes">
+        <div class="paint-kf-title"><span>Keyframes</span><span>04 / 05</span></div>
+        <div class="paint-kf">
+          <div class="kf-thumb thumb-hair"><div class="mark-fg"></div></div>
+          <div class="paint-kf-info"><span class="n">FR 012</span><span>edge · hair</span><span class="hint">HINTED</span></div>
+        </div>
+        <div class="paint-kf">
+          <div class="kf-thumb thumb-hair"><div class="mark-fg"></div><div class="mark-bg"></div></div>
+          <div class="paint-kf-info"><span class="n">FR 064</span><span>mid-stride</span><span class="hint">HINTED</span></div>
+        </div>
+        <div class="paint-kf">
+          <div class="kf-thumb thumb-hair"><div class="mark-fg"></div><div class="mark-bg"></div></div>
+          <div class="paint-kf-info"><span class="n">FR 112</span><span>motion blur</span><span class="hint">HINTED</span></div>
+        </div>
+        <div class="paint-kf" aria-selected="true">
+          <div class="kf-thumb thumb-hair"><div class="mark-fg"></div><div class="mark-bg"></div></div>
+          <div class="paint-kf-info"><span class="n">FR 164</span><span>current · silhouette</span><span class="hint">PAINTING</span></div>
+        </div>
+        <div class="paint-kf">
+          <div class="kf-thumb thumb-hair" style="opacity:0.5"></div>
+          <div class="paint-kf-info"><span class="n">FR 228</span><span>exit frame</span><span style="color:var(--warn); font-size:9.5px; letter-spacing:0.08em">NEEDS HINT</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <span class="session-badge"><span style="width:6px;height:6px;background:var(--hint-fg);"></span>FG</span>
+      <span class="session-badge"><span style="width:6px;height:6px;background:var(--hint-bg);"></span>BG</span>
+      <span style="color:var(--ink-3)">· 42 / 120 FRAMES HINTED · 04 KEYFRAMES</span>
+      <div class="spacer"></div>
+      <button class="btn">GENERATE REMAINING</button>
+      <button class="btn primary" id="paintApply">APPLY &amp; CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= TWEAKS PANEL ======================= -->
+<div id="tweaks">
+  <div class="tweaks-head">
+    <span class="t">Tweaks</span>
+    <button class="icon-btn" id="tweaksClose" style="width:24px;height:24px;border:1px solid var(--rule);">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="tweaks-body">
+    <div class="tweak-row">
+      <span class="lab">Density</span>
+      <div class="tweak-seg" data-tweak="density">
+        <button data-v="comfort" aria-pressed="true">Comfort</button>
+        <button data-v="compact" aria-pressed="false">Compact</button>
+        <button data-v="ultra" aria-pressed="false">Ultra</button>
+      </div>
+    </div>
+    <div class="tweak-row">
+      <span class="lab">Accent</span>
+      <div class="swatches" data-tweak="accent">
+        <button data-v="yellow" aria-pressed="true" style="background:#eab308"></button>
+        <button data-v="green"  aria-pressed="false" style="background:#4ade80"></button>
+        <button data-v="orange" aria-pressed="false" style="background:#ff5c1a"></button>
+        <button data-v="ivory"  aria-pressed="false" style="background:#f2efe8"></button>
+      </div>
+    </div>
+    <div class="tweak-row">
+      <span class="lab">Chrome Weight</span>
+      <div class="tweak-seg" data-tweak="chrome">
+        <button data-v="hair"  aria-pressed="false">Hair</button>
+        <button data-v="med"   aria-pressed="true">Medium</button>
+        <button data-v="heavy" aria-pressed="false">Heavy</button>
+      </div>
+    </div>
+    <div class="tweak-row">
+      <span class="lab">Viewer Layout</span>
+      <div class="tweak-seg" data-tweak="split">
+        <button data-v="split-h"  aria-pressed="true">A │ B</button>
+        <button data-v="split-v"  aria-pressed="false">A ─ B</button>
+        <button data-v="single"   aria-pressed="false">Single</button>
+      </div>
+    </div>
+    <div class="tweak-row">
+      <span class="lab">Live Pending Overlay</span>
+      <div class="tweak-seg" data-tweak="pending">
+        <button data-v="on"  aria-pressed="true">On</button>
+        <button data-v="off" aria-pressed="false">Off</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== TWEAKS DEFAULTS =====================
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "density": "compact",
+  "accent": "green",
+  "chrome": "hair",
+  "split": "split-h",
+  "pending": "off"
+}/*EDITMODE-END*/;
+
+let tweakState = { ...TWEAK_DEFAULTS };
+
+function applyTweaks(){
+  const r = document.documentElement;
+  r.dataset.density = tweakState.density === "comfort" ? "" : tweakState.density;
+  r.dataset.accent  = tweakState.accent;
+  r.dataset.chrome  = tweakState.chrome === "med" ? "" : tweakState.chrome;
+  // viewer split
+  const inner = document.getElementById("viewerInner");
+  inner.classList.remove("split-h","split-v","single");
+  inner.classList.add(tweakState.split);
+  document.querySelectorAll(".view-mode-btn[data-mode]").forEach(b=>{
+    if(b.dataset.mode==="split-h" || b.dataset.mode==="split-v" || b.dataset.mode==="single"){
+      b.setAttribute("aria-pressed", String(b.dataset.mode===tweakState.split));
+    }
+  });
+  // pending overlay
+  document.querySelector(".stream-overlay").style.display = tweakState.pending === "on" ? "" : "none";
+  document.getElementById("scrubEdge").style.display = tweakState.pending === "on" ? "" : "none";
+  // reflect buttons
+  document.querySelectorAll("[data-tweak]").forEach(group=>{
+    const key = group.dataset.tweak;
+    group.querySelectorAll("button[data-v]").forEach(b=>{
+      b.setAttribute("aria-pressed", String(b.dataset.v === tweakState[key]));
+    });
+  });
+}
+
+document.querySelectorAll("[data-tweak]").forEach(group=>{
+  group.addEventListener("click", e=>{
+    const btn = e.target.closest("button[data-v]"); if(!btn) return;
+    const key = group.dataset.tweak;
+    tweakState[key] = btn.dataset.v;
+    applyTweaks();
+    try {
+      window.parent.postMessage({type:'__edit_mode_set_keys', edits: { [key]: btn.dataset.v }}, '*');
+    } catch {}
+  });
+});
+applyTweaks();
+
+// ===================== EDIT MODE (for toolbar toggle) =====================
+window.addEventListener('message', (e)=>{
+  const d = e.data || {};
+  if(d.type === '__activate_edit_mode')   openTweaks(true);
+  if(d.type === '__deactivate_edit_mode') openTweaks(false);
+});
+setTimeout(()=>{
+  try { window.parent.postMessage({type:'__edit_mode_available'}, '*'); } catch {}
+}, 0);
+
+function openTweaks(on){
+  const el = document.getElementById("tweaks");
+  el.dataset.open = on ? "true" : "false";
+}
+document.getElementById("tweaksToggle").addEventListener("click", ()=>{
+  const el = document.getElementById("tweaks");
+  openTweaks(el.dataset.open !== "true");
+});
+document.getElementById("tweaksClose").addEventListener("click", ()=>openTweaks(false));
+
+// ===================== RAIL TABS =====================
+document.querySelectorAll(".rail-tab").forEach(tab=>{
+  tab.addEventListener("click", ()=>{
+    document.querySelectorAll(".rail-tab").forEach(t=>t.setAttribute("aria-selected","false"));
+    tab.setAttribute("aria-selected","true");
+    const key = tab.dataset.tab;
+    document.querySelectorAll("[data-tab-panel]").forEach(p=>{
+      p.hidden = p.dataset.tabPanel !== key;
+    });
+  });
+});
+
+// ===================== MEDIA LIST SELECTION =====================
+const viewerClipName = document.getElementById("viewerClipName");
+const viewerClipState = document.getElementById("viewerClipState");
+document.querySelectorAll(".clip").forEach(clip=>{
+  clip.addEventListener("click", ()=>{
+    document.querySelectorAll(".clip").forEach(c=>c.setAttribute("aria-selected","false"));
+    clip.setAttribute("aria-selected","true");
+    const name = clip.querySelector(".clip-name").textContent;
+    const state = clip.querySelector(".clip-state").textContent;
+    viewerClipName.textContent = name;
+    viewerClipState.textContent = "· " + state;
+  });
+});
+
+// ===================== KEY SPLIT BUTTON =====================
+const keyGroup = document.getElementById("keyGroup");
+const keyScope = document.getElementById("keyScope");
+const keyScopeLabel = document.getElementById("keyScopeLabel");
+const keyMainCount = document.querySelector("#keyMain .count");
+keyScope.addEventListener("click", e=>{
+  e.stopPropagation();
+  keyGroup.dataset.open = keyGroup.dataset.open === "true" ? "false" : "true";
+});
+document.addEventListener("click", ()=>{ keyGroup.dataset.open = "false"; });
+document.querySelectorAll(".key-dropdown-item").forEach(item=>{
+  item.addEventListener("click", e=>{
+    e.stopPropagation();
+    document.querySelectorAll(".key-dropdown-item").forEach(i=>i.classList.remove("active"));
+    item.classList.add("active");
+    const scope = item.dataset.scope;
+    const n = item.querySelector(".n").textContent;
+    const labels = { selected: "SELECTED · "+n, ready: "ALL-READY · "+n, all: "EVERYTHING · "+n };
+    keyMainCount.textContent = labels[scope];
+    keyGroup.dataset.open = "false";
+  });
+});
+
+// ===================== LAYER TABS =====================
+const outputPane = document.getElementById("outputPane");
+const outputLayerLabel = document.getElementById("outputLayerLabel");
+const layerNames = {
+  alpha: "ALPHA · MATTE",
+  fg:    "FG · PREMULT",
+  matte: "MATTE · 8F",
+  comp:  "COMP · OVER BARS",
+  processed: "PROCESSED · RGBA"
+};
+function setLayer(layer){
+  document.querySelectorAll(".layer-tab").forEach(t=>t.setAttribute("aria-pressed", String(t.dataset.layer===layer)));
+  outputPane.dataset.layer = layer;
+  outputLayerLabel.textContent = layerNames[layer];
+
+  // Swap the output pane visualization
+  const existing = outputPane.querySelector(".layer-viz");
+  if(existing) existing.remove();
+  const plate = document.getElementById("outputPlate");
+  const viz = document.createElement("div");
+  viz.className = "layer-viz";
+  viz.style.position = "absolute";
+  viz.style.inset = "0";
+
+  if(layer === "alpha" || layer === "matte"){
+    plate.style.display = "none";
+    viz.innerHTML = '<div class="alpha-matte"></div>';
+  } else if(layer === "fg"){
+    plate.style.display = "";
+    viz.innerHTML = '<div class="checker"></div>';
+    // silhouette darken outside figure
+    const dim = document.createElement("div");
+    dim.style.position = "absolute"; dim.style.inset = "0";
+    dim.style.background = "rgba(11,12,14,0.9)";
+    dim.style.mixBlendMode = "normal";
+    dim.style.maskImage = "radial-gradient(ellipse 10% 16% at 50% 22%, transparent 0 78%, #000 84%), radial-gradient(ellipse 14% 32% at 50% 62%, transparent 0 74%, #000 84%)";
+    dim.style.webkitMaskImage = dim.style.maskImage;
+    dim.style.maskComposite = "intersect";
+    dim.style.webkitMaskComposite = "source-in";
+    viz.appendChild(dim);
+  } else if(layer === "comp"){
+    plate.style.display = "";
+    // no extra viz
+  } else if(layer === "processed"){
+    plate.style.display = "";
+    viz.innerHTML = '';
+    viz.style.background = "rgba(0,0,0,0.25)";
+    viz.style.mixBlendMode = "multiply";
+  }
+  if(viz.innerHTML || viz.style.background) outputPane.insertBefore(viz, outputPane.querySelector(".stream-overlay"));
+}
+document.querySelectorAll(".layer-tab").forEach(t=>{
+  t.addEventListener("click", ()=>setLayer(t.dataset.layer));
+});
+
+// ===================== VIEW MODES =====================
+document.querySelectorAll(".view-mode-btn[data-mode]").forEach(btn=>{
+  if(btn.dataset.mode === "paint") return;
+  btn.addEventListener("click", ()=>{
+    tweakState.split = btn.dataset.mode;
+    applyTweaks();
+    try { window.parent.postMessage({type:'__edit_mode_set_keys', edits: { split: tweakState.split }}, '*'); } catch {}
+  });
+});
+
+// ===================== SCRUB =====================
+const track = document.getElementById("scrubTrack");
+const playhead = document.getElementById("scrubPlayhead");
+const frameLabel = document.getElementById("scrubFrame");
+const timeLabel = document.getElementById("scrubTime");
+const viewerTCs = document.querySelectorAll(".viewer-tc");
+const TOTAL_FR = 240;
+const FPS = 24;
+
+function setPlayhead(pct){
+  pct = Math.max(0, Math.min(100, pct));
+  playhead.style.left = pct + "%";
+  const fr = Math.round((pct/100) * TOTAL_FR);
+  frameLabel.textContent = "FR " + String(fr).padStart(3,"0");
+  const seconds = fr / FPS;
+  const h = Math.floor(seconds/3600);
+  const m = Math.floor((seconds%3600)/60);
+  const s = Math.floor(seconds%60);
+  const f = fr % FPS;
+  const tc = `01:${String(m+4).padStart(2,"0")}:${String(s+12).padStart(2,"0")}:${String(f).padStart(2,"0")}`;
+  timeLabel.textContent = tc;
+  viewerTCs.forEach(el=>{
+    const hi = el.querySelector(".r");
+    if(hi) hi.textContent = String(f).padStart(2,"0");
+  });
+}
+track.addEventListener("click", e=>{
+  const r = track.getBoundingClientRect();
+  const pct = ((e.clientX - r.left) / r.width) * 100;
+  setPlayhead(pct);
+});
+track.addEventListener("mousedown", e=>{
+  const onMove = ev=>{
+    const r = track.getBoundingClientRect();
+    setPlayhead(((ev.clientX - r.left) / r.width) * 100);
+  };
+  onMove(e);
+  const onUp = ()=>{ document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+});
+
+// Populate scrub ticks + keyframes
+(function initScrub(){
+  const ticks = document.getElementById("scrubTicks");
+  const kf = document.getElementById("scrubKeyframes");
+  const N = 12;
+  for(let i=0;i<N;i++){
+    const tick = document.createElement("i");
+    tick.textContent = String(i*20).padStart(3,"0");
+    ticks.appendChild(tick);
+  }
+  const keyframePositions = [12, 64, 112, 164, 228];
+  const frames = TOTAL_FR;
+  // Represent hinted frames (42 of 120)
+  const hinted = new Set();
+  keyframePositions.forEach(k=>{
+    for(let d=-8; d<=8; d++){
+      const f = k+d; if(f>=0 && f<120) hinted.add(f);
+    }
+  });
+  for(let f=0; f<frames; f++){
+    const i = document.createElement("i");
+    i.style.visibility = hinted.has(f) ? "visible" : "hidden";
+    i.style.width = (100/frames) + "%";
+    i.style.margin = "0";
+    kf.appendChild(i);
+  }
+})();
+setPlayhead(68);
+
+// ===================== PROJECT SWITCHER =====================
+const projectSwitch = document.getElementById("projectSwitch");
+const projectDropdown = document.getElementById("projectDropdown");
+projectSwitch.addEventListener("click", (e)=>{
+  e.stopPropagation();
+  const open = projectDropdown.hidden;
+  projectDropdown.hidden = !open;
+  projectSwitch.setAttribute("aria-expanded", String(open));
+});
+document.addEventListener("click", (e)=>{
+  if(!projectDropdown.contains(e.target) && e.target !== projectSwitch) {
+    projectDropdown.hidden = true;
+    projectSwitch.setAttribute("aria-expanded","false");
+  }
+});
+projectDropdown.querySelectorAll(".pd-item").forEach(it=>{
+  it.addEventListener("click", ()=>{
+    projectDropdown.querySelectorAll(".pd-item").forEach(x=>x.classList.remove("current"));
+    it.classList.add("current");
+    const name = it.querySelector(".pd-name")?.textContent || "Untitled";
+    document.querySelector(".project-name").firstChild.textContent = name + " ";
+    projectDropdown.hidden = true;
+    projectSwitch.setAttribute("aria-expanded","false");
+    markDirty();
+  });
+});
+
+// ===================== SAVE STATE =====================
+const saveState = document.getElementById("saveState");
+const saveBtn = document.getElementById("saveBtn");
+function markDirty(){ saveState.dataset.dirty = "true"; }
+function triggerSave(){
+  saveState.dataset.dirty = "false";
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,"0");
+  const mm = String(now.getMinutes()).padStart(2,"0");
+  saveState.querySelector(".sv-clean").textContent = "saved " + hh + ":" + mm;
+}
+saveBtn.addEventListener("click", triggerSave);
+// Dirty any time a slider/toggle/seg changes
+document.querySelectorAll(".params .pslider, .params .switch, .params .pseg button").forEach(el=>{
+  el.addEventListener("click", markDirty);
+});
+
+// ===================== HINT PAINTER =====================
+const paintModal = document.getElementById("paintModal");
+document.getElementById("openPainter").addEventListener("click", (e)=>{ e.preventDefault(); /* disabled: painter coming soon */ });
+document.getElementById("paintClose").addEventListener("click", ()=>paintModal.dataset.open = "false");
+document.getElementById("paintApply").addEventListener("click", ()=>paintModal.dataset.open = "false");
+paintModal.addEventListener("click", e=>{
+  if(e.target === paintModal) paintModal.dataset.open = "false";
+});
+document.querySelectorAll(".brush-btn").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll(".brush-btn").forEach(x=>x.setAttribute("aria-pressed","false"));
+    b.setAttribute("aria-pressed","true");
+    const cross = document.querySelector(".crosshair-brush");
+    const fg = b.dataset.brush === "fg";
+    cross.style.borderColor = fg ? "var(--hint-fg)" : "var(--hint-bg)";
+    cross.style.setProperty("--c", fg ? "var(--hint-fg)" : "var(--hint-bg)");
+    cross.querySelector(":scope")?.remove;
+    // update inner dot
+    cross.style.setProperty("background-image", "none");
+  });
+});
+document.querySelectorAll(".paint-kf").forEach(k=>{
+  k.addEventListener("click", ()=>{
+    document.querySelectorAll(".paint-kf").forEach(x=>x.removeAttribute("aria-selected"));
+    k.setAttribute("aria-selected","true");
+  });
+});
+
+// ===================== KEYBOARD =====================
+document.addEventListener("keydown", e=>{
+  if(e.target.tagName === "INPUT") return;
+  const map = { "1":"alpha","2":"fg","3":"matte","4":"comp","5":"processed" };
+  if(map[e.key]) { setLayer(map[e.key]); e.preventDefault(); }
+  if(e.key.toLowerCase() === "f") {
+    if(tweakState.split === "single") tweakState.split = tweakState._lastSplit || "split-h";
+    else { tweakState._lastSplit = tweakState.split; tweakState.split = "single"; }
+    applyTweaks();
+  }
+  if(e.key.toLowerCase() === "s") { tweakState.split = "single"; applyTweaks(); }
+  // H (hint painter) disabled for MVP — VideoMaMa not shipping yet
+  if(e.key === "Escape") { paintModal.dataset.open = "false"; document.getElementById("projectDropdown").hidden = true; document.getElementById("projectSwitch").setAttribute("aria-expanded","false"); }
+  if((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); triggerSave(); }
+});
+
+// ===================== FAKE LIVE PROGRESS =====================
+(function live(){
+  let pct = 68;
+  const bar = document.getElementById("qbar1");
+  const frameFr = ()=>document.querySelectorAll(".clip.st-keying .clip-state")[0];
+  setInterval(()=>{
+    pct += (Math.random() * 0.35);
+    if(pct > 92) pct = 68;
+    if(bar) bar.style.width = pct.toFixed(1) + "%";
+    const f = frameFr(); if(f) f.textContent = "KEYING " + Math.round(pct) + "%";
+    const edge = document.getElementById("scrubEdge");
+    if(edge) edge.style.left = pct + "%";
+    // update processed region on scrub
+    document.getElementById("scrubProcessed").style.width = pct + "%";
+    // session cost
+    const cost = (0.42 + (pct-68) * 0.004).toFixed(2);
+    document.getElementById("statCost").textContent = "$" + cost;
+  }, 650);
+})();
+</script>
+
+</body>
+</html>

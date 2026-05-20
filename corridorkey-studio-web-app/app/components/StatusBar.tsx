@@ -1,200 +1,119 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { AlertTriangle, Monitor, Cloud, ChevronDown } from "lucide-react";
-import { useClipStore } from "../stores/useClipStore";
-import { useQueueStore } from "../stores/useQueueStore";
-import { useSettingsStore } from "../stores/useSettingsStore";
-import { JobStatus, BackendMode } from "../lib/types";
-import ServerSetup from "./ServerSetup";
-
-const JOB_LABELS: Record<string, string> = {
-  INFERENCE: "KEYING",
-  GVM_ALPHA: "GENERATING ALPHA",
-  VIDEOMAMA_ALPHA: "GENERATING ALPHA",
-  VIDEO_EXTRACT: "EXTRACTING",
-  PREVIEW: "PREVIEW",
-};
-
+/**
+ * Bottom status bar. Matches DESIGN_MOCK.html §2206–2223 layout (left-
+ * aligned system stats, push-right keyboard strip + backend chip).
+ *
+ * Slice 3 stubs the data-heavy cells:
+ *   - Cloud = "CLOUD" (no region / GPU — slice 5+)
+ *   - Queue = 00 RUN · 00 WAIT (slice 4 wires real jobs)
+ *   - Stream = "IDLE" until keying ships
+ *   - Session cost = $0.00 · 0.0 GPU-min (slice 5)
+ *   - Surge = OFF · SPOT (placeholder)
+ * The runtime Tweaks panel from the prototype has been dropped; the
+ * TWEAKS button is not shipped.
+ */
 export default function StatusBar() {
-  const clips = useClipStore((s) => s.clips);
-  const selectedId = useClipStore((s) => s.selectedClipId);
-  const jobs = useQueueStore((s) => s.jobs);
-  const connectionStatus = useSettingsStore((s) => s.connectionStatus);
-  const gpu = useSettingsStore((s) => s.gpu);
-  const backendMode = useSettingsStore((s) => s.backendMode);
-  const [setupOpen, setSetupOpen] = useState(false);
-  const [modeDropOpen, setModeDropOpen] = useState(false);
-  const modeDropRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!modeDropOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (modeDropRef.current && !modeDropRef.current.contains(e.target as Node)) {
-        setModeDropOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [modeDropOpen]);
-
-  const selectedClip = clips.find((c) => c.id === selectedId);
-  const runningJob = jobs.find((j) => j.status === JobStatus.RUNNING);
-  const totalWarnings = clips.reduce((sum, c) => sum + c.warnings.length, 0);
-  const isConnected = connectionStatus === "connected";
-
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes ck-spin {
-          0% { transform: rotate(0deg); }
-          25% { transform: rotate(180deg); }
-          50% { transform: rotate(180deg); }
-          75% { transform: rotate(360deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}} />
-      <div className="border-t border-[var(--border)] bg-[var(--surface)] shrink-0 select-none overflow-visible relative">
-        {/* Full-width progress bar at top of status bar */}
-        {runningJob && (
-          <div className="h-0.5 bg-[#222] w-full">
-            <div
-              className="h-full bg-[var(--accent)] transition-all duration-300"
-              style={{ width: `${runningJob.progress * 100}%` }}
-            />
-          </div>
-        )}
+    <footer
+      className="flex items-stretch border-t border-[var(--rule-strong)] bg-[var(--bg-1)] text-[10px] tracking-[0.04em] text-[var(--ink-2)] overflow-hidden min-w-0"
+      style={{ height: "var(--statusbar-h)" }}
+    >
+      <Stat>
+        <Dot />
+        <K>Cloud</K>
+        <V>CLOUD</V>
+      </Stat>
+      <Stat>
+        <K>Queue</K>
+        <V>00 RUN · 00 WAIT</V>
+      </Stat>
+      <Stat>
+        <K>Stream</K>
+        <V>IDLE</V>
+      </Stat>
+      <Stat>
+        <K>Session</K>
+        <V>$0.00</V>
+        <span className="text-[var(--ink-2)]">· 0.0 GPU-min</span>
+      </Stat>
+      <Stat>
+        <K>Surge</K>
+        <Chip>OFF · SPOT</Chip>
+      </Stat>
 
-        <div className="h-9 flex items-center justify-between px-4">
-        {/* Left: Progress / frame info */}
-        <div className="flex items-center gap-3 flex-1">
-          {runningJob && (
-            <div className="flex items-center gap-2">
-              <div
-                className="w-2 h-2 bg-[var(--accent)]"
-                style={{ animation: "ck-spin 1.6s ease-in-out infinite" }}
-              />
-              <span className="text-[10px] text-[var(--accent)] uppercase tracking-wider font-bold">
-                {JOB_LABELS[runningJob.type] || runningJob.type.replace(/_/g, " ")}
-              </span>
-            </div>
-          )}
-          <span className="text-[10px] text-[var(--text-muted)]">
-            {runningJob
-              ? `${runningJob.currentFrame}/${runningJob.totalFrames} frames · ${Math.round(runningJob.progress * 100)}%`
-              : selectedClip
-              ? `${selectedClip.frameCount} frames`
-              : "NO CLIP SELECTED"}
-          </span>
-          {totalWarnings > 0 && (
-            <span className="flex items-center gap-1 text-[10px] text-[var(--warning)]">
-              <AlertTriangle size={10} />
-              {totalWarnings}
-            </span>
-          )}
-        </div>
-
-        {/* Right: Backend mode dropdown + connection */}
-        <div className="flex items-center gap-2">
-          {/* Backend mode dropdown */}
-          <div className="relative" ref={modeDropRef}>
-            <button
-              onClick={() => setModeDropOpen(!modeDropOpen)}
-              className="flex items-center gap-1.5 px-2 py-0.5 border border-[var(--border)] text-[10px] uppercase tracking-wider cursor-pointer hover:border-[var(--text-muted)] transition-colors"
-            >
-              {backendMode === BackendMode.LOCAL ? <Monitor size={10} /> : <Cloud size={10} />}
-              {backendMode}
-              <ChevronDown size={8} />
-            </button>
-            {modeDropOpen && <ModeDropdown dropRef={modeDropRef} backendMode={backendMode} onClose={() => setModeDropOpen(false)} />}
-          </div>
-
-          {/* Connection indicator */}
-          {backendMode === BackendMode.CLOUD ? (
-            <div className="flex items-center gap-1.5 text-[10px]">
-              <div className="w-2 h-2 shrink-0 bg-[var(--success)]" />
-              <span className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider">
-                CLOUD READY
-              </span>
-            </div>
-          ) : (
-            <button
-              onClick={() => !isConnected && setSetupOpen(true)}
-              className={`flex items-center gap-1.5 text-[10px] transition-colors ${
-                isConnected
-                  ? "text-[var(--success)]"
-                  : "text-[var(--error)] cursor-pointer hover:text-[var(--text)]"
-              }`}
-            >
-              <div
-                className="w-2 h-2 shrink-0"
-                style={{
-                  background: isConnected
-                    ? "var(--success)"
-                    : connectionStatus === "connecting"
-                    ? "var(--warning)"
-                    : "var(--error)",
-                }}
-              />
-              {isConnected ? (
-                <span className="text-[9px] text-[var(--text-muted)]">
-                  {gpu.name}{gpu.vramUsed > 0 ? ` · ${gpu.vramUsed.toFixed(1)}/${gpu.vramTotal.toFixed(1)} GB` : ""}
-                </span>
-              ) : (
-                <span className="uppercase tracking-wider">SETUP NEEDED</span>
-              )}
-            </button>
-          )}
-        </div>
-        </div>
-      </div>
-      {setupOpen && <ServerSetup onClose={() => setSetupOpen(false)} />}
-    </>
+      <Stat className="ml-auto hidden xl:flex">
+        <K>Keys</K>
+        <Chip>1–5</Chip>
+        <Chip>F</Chip>
+        <Chip>S</Chip>
+        <Chip>⌘S</Chip>
+      </Stat>
+      <Stat>
+        <K>Backend</K>
+        <Chip active>CLOUD</Chip>
+      </Stat>
+    </footer>
   );
 }
 
-function ModeDropdown({
-  dropRef,
-  backendMode,
-  onClose,
-}: {
-  dropRef: React.RefObject<HTMLDivElement | null>;
-  backendMode: BackendMode;
-  onClose: () => void;
-}) {
-  const rect = dropRef.current?.getBoundingClientRect();
-  const pos = rect
-    ? { bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right }
-    : { bottom: 40, right: 16 };
+/* ----------------------------- primitives ------------------------------- */
 
+function Stat({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
     <div
-      className="fixed w-56 bg-[var(--surface)] border border-[var(--border)] z-[200]"
-      style={{ bottom: pos.bottom, right: pos.right }}
+      className={`flex items-center gap-[7px] px-2.5 border-r border-[var(--rule)] whitespace-nowrap shrink-0 last:border-r-0 ${className}`}
     >
-      <button
-        onClick={onClose}
-        className={`w-full text-left px-3 py-2 cursor-pointer transition-colors border-b border-[var(--border)] ${
-          backendMode === BackendMode.CLOUD ? "bg-[var(--surface-2)]" : "hover:bg-[var(--surface-2)]"
-        }`}
-      >
-        <div className="flex items-center gap-2">
-          <Cloud size={12} className="text-[var(--text)]" />
-          <div>
-            <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text)]">CLOUD</div>
-            <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Free cloud GPUs — signed in via your account</div>
-          </div>
-        </div>
-      </button>
-      <div className="w-full text-left px-3 py-2 opacity-40 cursor-not-allowed">
-        <div className="flex items-center gap-2">
-          <Monitor size={12} className="text-[var(--text-muted)]" />
-          <div>
-            <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">LOCAL</div>
-            <div className="text-[9px] text-[var(--text-muted)] mt-0.5">Run on your own GPU — coming back soon</div>
-          </div>
-        </div>
-      </div>
+      {children}
     </div>
+  );
+}
+
+function K({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[var(--ink-3)] tracking-[0.2em] uppercase text-[9.5px]">
+      {children}
+    </span>
+  );
+}
+
+function V({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[var(--ink-0)] tabular-nums">{children}</span>
+  );
+}
+
+function Dot() {
+  return (
+    <span
+      className="w-[6px] h-[6px] rounded-full"
+      style={{ background: "var(--ok)" }}
+    />
+  );
+}
+
+function Chip({
+  children,
+  active,
+}: {
+  children: React.ReactNode;
+  active?: boolean;
+}) {
+  return (
+    <span
+      className="border px-[5px] py-[2px] uppercase tracking-[0.14em] text-[9px]"
+      style={{
+        color: active ? "var(--accent)" : "var(--ink-1)",
+        borderColor: active ? "var(--accent)" : "var(--rule)",
+      }}
+    >
+      {children}
+    </span>
   );
 }
